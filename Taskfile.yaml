@@ -1,0 +1,49 @@
+version: '3'
+
+# Переменные из .env (если файл есть) доступны всем задачам, включая run.
+dotenv: ['.env']
+
+tasks:
+  build:
+    desc: Собрать все пакеты
+    cmds:
+      - go build ./...
+
+  run:
+    desc: Запустить сервис локально
+    cmds:
+      - go run ./cmd/server
+
+  vet:
+    desc: Статическая проверка go vet
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Тесты с детектором гонок
+    cmds:
+      - go test -race -count=1 ./...
+
+  lint:
+    desc: golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  check:
+    desc: Всё, что должно проходить перед коммитом
+    cmds:
+      - task: build
+      - task: vet
+      - task: test
+
+  gen:
+    desc: Сгенерировать docker-compose.yml из deployments/cue
+    cmds:
+      - cue vet -c ./deployments/cue
+      - cmd: |
+          { echo '# Код сгенерирован из deployments/cue (task gen). Не правьте вручную.'
+            cue export ./deployments/cue -e compose --out yaml; } > docker-compose.yml
+  up:
+    desc: Поднять сервис и Postgres в Docker
+    cmds:
+      - docker compose up --build -d
