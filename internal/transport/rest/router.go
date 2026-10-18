@@ -1,17 +1,27 @@
 package rest
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware"
 	"github.com/aikowocki/ufanet-iptv/internal/transport/rest/response"
 )
 
-// NewRouter собирает корневой обработчик сервиса с общими middleware.
-func NewRouter(log *slog.Logger) http.Handler {
+// readyTimeout ограничивает проверку готовности, чтобы зависшая БД не держала запрос.
+const readyTimeout = 2 * time.Second
+
+// ReadyCheck проверяет готовность зависимостей (например, ping БД).
+type ReadyCheck func(ctx context.Context) error
+
+// NewRouter собирает корневой обработчик сервиса с общими middleware
+// ready используется в GET /readyz; nil означает «зависимостей нет, всегда готов».
+func NewRouter(log *slog.Logger, ready ReadyCheck) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
+	mux.HandleFunc("GET /readyz", handleReadyz(log, ready))
 
 	// Порядок: RequestID -> AccessLog -> Recover, чтобы ответ 500 после паники
 	// тоже попал в access-лог с идентификатором запроса.
@@ -59,4 +69,21 @@ func (p *probeWriter) WriteHeader(code int)        { p.status = code }
 
 func handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleReadyz отвечает 200, если зависимости доступны, иначе 503.
+// Причина попадает только в лог: клиенту детали инфраструктуры не нужны.
+func handleReadyz(log *slog.Logger, ready ReadyCheck) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if ready != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), readyTimeout)
+			defer cancel()
+			if err := ready(ctx); err != nil {
+				log.Warn("readiness check failed", "error", err)
+				response.Error(w, http.StatusServiceUnavailable, response.CodeUnavailable, "service is not ready")
+				return
+			}
+		}
+		response.JSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	}
 }

@@ -1,7 +1,9 @@
 package rest
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -31,7 +33,7 @@ func do(t *testing.T, h http.Handler, method, target string) *httptest.ResponseR
 }
 
 func TestHealthz(t *testing.T) {
-	rec := do(t, NewRouter(discardLogger()), http.MethodGet, "/healthz")
+	rec := do(t, NewRouter(discardLogger(), nil), http.MethodGet, "/healthz")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -58,7 +60,7 @@ func TestRouterErrorsAreJSON(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := do(t, NewRouter(discardLogger()), tt.method, tt.target)
+			rec := do(t, NewRouter(discardLogger(), nil), tt.method, tt.target)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
@@ -75,6 +77,29 @@ func TestRouterErrorsAreJSON(t *testing.T) {
 			}
 			if body.Error.Code != tt.wantCode || body.Error.Message == "" {
 				t.Errorf("error body = %+v, want code %q and non-empty message", body.Error, tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestReadyz(t *testing.T) {
+	tests := []struct {
+		name       string
+		check      ReadyCheck
+		wantStatus int
+	}{
+		{"no checks", nil, http.StatusOK},
+		{"healthy", func(context.Context) error { return nil }, http.StatusOK},
+		{"db down", func(context.Context) error { return errors.New("conn refused: secret-host") }, http.StatusServiceUnavailable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := do(t, NewRouter(discardLogger(), tt.check), http.MethodGet, "/readyz")
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+			if strings.Contains(rec.Body.String(), "secret-host") {
+				t.Errorf("response leaks internal error: %q", rec.Body.String())
 			}
 		})
 	}

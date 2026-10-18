@@ -36,13 +36,19 @@ tasks:
       - task: vet
       - task: test
 
-  gen:
-    desc: Сгенерировать docker-compose.yml из deployments/cue
+  migrate:new:
+    desc: "Создать пару миграций: task migrate:new -- add_packages"
     cmds:
-      - cue vet -c ./deployments/cue
-      - cmd: |
-          { echo '# Код сгенерирован из deployments/cue (task gen). Не правьте вручную.'
-            cue export ./deployments/cue -e compose --out yaml; } > docker-compose.yml
+      - |
+        name="{{.CLI_ARGS}}"
+        case "$name" in
+          ""|*[!a-z0-9_]*) echo "usage: task migrate:new -- snake_case_name" >&2; exit 1 ;;
+        esac
+        ts=$(date -u +%Y%m%d%H%M%S)
+        dir=internal/infra/postgres/migrations
+        : > "$dir/${ts}_${name}.up.sql"
+        : > "$dir/${ts}_${name}.down.sql"
+        echo "created $dir/${ts}_${name}.{up,down}.sql"
   up:
     desc: Поднять сервис и Postgres в Docker
     cmds:

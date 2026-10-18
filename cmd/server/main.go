@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/aikowocki/ufanet-iptv/internal/config"
+	"github.com/aikowocki/ufanet-iptv/internal/infra/passhash"
+	"github.com/aikowocki/ufanet-iptv/internal/infra/postgres"
 	"github.com/aikowocki/ufanet-iptv/internal/transport/rest"
 )
 
@@ -40,8 +42,26 @@ func run() error {
 	// зависла, повторный Ctrl+C завершит процесс сразу.
 	context.AfterFunc(ctx, stop)
 
+	if err := postgres.Migrate(log, cfg.DatabaseURL); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+
+	pool, err := postgres.NewPool(ctx, log, cfg.DatabaseURL, cfg.DBMaxConnections, cfg.DBConnectTimeout)
+	if err != nil {
+		return fmt.Errorf("postgres: %w", err)
+	}
+	defer pool.Close()
+
+	hasher := passhash.New(cfg.HashConcurrency, cfg.HashWaitTimeout)
+	// Сидер запускается только в dev: админ создаётся миграцией, а демо-данные нет.
+	if cfg.Env == config.EnvDev {
+		if err := postgres.Seed(ctx, log, pool, hasher); err != nil {
+			return fmt.Errorf("seed: %w", err)
+		}
+	}
+
 	srv := &http.Server{
-		Handler:           rest.NewRouter(log),
+		Handler:           rest.NewRouter(log, pool.Ping),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

@@ -85,3 +85,17 @@ func TestLoadErrorMentionsVariableAndCause(t *testing.T) {
 		t.Errorf("error = %q, want variable name and the original parse error", msg)
 	}
 }
+
+func TestLoadAppEnv(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil || cfg.Env != EnvProd {
+		t.Fatalf("default Env = %q, err = %v; want prod", cfg.Env, err)
+	}
+	cfg, err = Load(env(map[string]string{"APP_ENV": "dev"}))
+	if err != nil || cfg.Env != EnvDev {
+		t.Fatalf("Env = %q, err = %v; want dev", cfg.Env, err)
+	}
+	if _, err = Load(env(map[string]string{"APP_ENV": "staging"})); err == nil {
+		t.Error("expected error for unknown APP_ENV")
+	}
+}

@@ -5,8 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
+)
+
+// Режимы работы сервиса.
+const (
+	EnvDev  = "dev"
+	EnvProd = "prod"
 )
 
 // Config содержит все настройки сервиса. Значения по умолчанию подходят
@@ -21,6 +30,20 @@ type Config struct {
 	IdleTimeout       time.Duration
 	// ShutdownTimeout ограничивает время ожидания завершения текущих запросов.
 	ShutdownTimeout time.Duration
+
+	// DatabaseURL — строка подключения к Postgres.
+	DatabaseURL string
+	// DBConnectTimeout ограничивает ожидание доступности БД при старте.
+	DBConnectTimeout time.Duration
+	// DBMaxConnections — максимальный размер пула соединений.
+	DBMaxConnections int
+	// Env — режим работы: EnvDev или EnvProd. В dev при старте запускается сидер.
+	Env string
+
+	// HashConcurrency — сколько проверок argon2id может выполняться одновременно.
+	HashConcurrency int
+	// HashWaitTimeout — сколько ждать свободный слот проверки пароля.
+	HashWaitTimeout time.Duration
 }
 
 // Load читает конфигурацию через getenv (обычно os.Getenv).
@@ -38,6 +61,14 @@ func Load(getenv func(string) string) (Config, error) {
 		WriteTimeout:      l.duration("HTTP_WRITE_TIMEOUT", 15*time.Second),
 		IdleTimeout:       l.duration("HTTP_IDLE_TIMEOUT", 60*time.Second),
 		ShutdownTimeout:   l.duration("SHUTDOWN_TIMEOUT", 10*time.Second),
+
+		DatabaseURL:      l.str("DATABASE_URL", "postgres://iptv:iptv@localhost:5442/iptv?sslmode=disable"),
+		DBConnectTimeout: l.duration("DB_CONNECT_TIMEOUT", 30*time.Second),
+		DBMaxConnections: l.positiveInt("DB_MAX_CONNECTIONS", 10),
+		Env:              l.oneOf("APP_ENV", EnvProd, EnvDev, EnvProd),
+
+		HashConcurrency: l.positiveInt("HASH_CONCURRENCY", runtime.GOMAXPROCS(0)),
+		HashWaitTimeout: l.duration("HASH_WAIT_TIMEOUT", 2*time.Second),
 	}
 
 	if err := errors.Join(l.errs...); err != nil {
@@ -78,6 +109,33 @@ func (l *loader) duration(key string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
+}
+
+func (l *loader) positiveInt(key string, def int) int {
+	v := l.get(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		l.errs = append(l.errs, fmt.Errorf("%s: want positive integer, got %q", key, v))
+		return def
+	}
+	return n
+}
+
+// oneOf читает переменную, значение которой должно быть одним из allowed.
+// Первым аргументом после key идёт значение по умолчанию.
+func (l *loader) oneOf(key, def string, allowed ...string) string {
+	v := l.get(key)
+	if v == "" {
+		return def
+	}
+	if !slices.Contains(allowed, v) {
+		l.errs = append(l.errs, fmt.Errorf("%s: want one of %s, got %q", key, strings.Join(allowed, "|"), v))
+		return def
+	}
+	return v
 }
 
 func (l *loader) level(key string, def slog.Level) slog.Level {
