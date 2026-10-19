@@ -1,0 +1,46 @@
+# +10
+name: IPTV-Ufanet
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-iptv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iptv}
+      POSTGRES_DB: ${POSTGRES_DB:-iptv}
+    ports:
+      - "${HOST_POSTGRES_PORT:-5442}:${POSTGRES_PORT:-5432}"
+
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # $$ раскрывается внутри контейнера, а не при разборе compose-файла.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HTTP_ADDR: ":${HTTP_PORT:-8080}"
+      APP_ENV: "${APP_ENV:-dev}"
+      # В сети compose Postgres доступен по имени сервиса; перекрывает DATABASE_URL из .env.
+      DATABASE_URL: "postgres://${POSTGRES_USER:-iptv}:${POSTGRES_PASSWORD:-iptv}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-iptv}?sslmode=disable"
+    ports:
+      - "${HOST_HTTP_PORT:-8080}:${HTTP_PORT:-8080}"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    stop_grace_period: 15s
+volumes:
+  pgdata:

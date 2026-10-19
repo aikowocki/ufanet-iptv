@@ -1,0 +1,55 @@
+version: '3'
+
+# Переменные из .env (если файл есть) доступны всем задачам, включая run.
+dotenv: ['.env']
+
+tasks:
+  build:
+    desc: Собрать все пакеты
+    cmds:
+      - go build ./...
+
+  run:
+    desc: Запустить сервис локально
+    cmds:
+      - go run ./cmd/server
+
+  vet:
+    desc: Статическая проверка go vet
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Тесты с детектором гонок
+    cmds:
+      - go test -race -count=1 ./...
+
+  lint:
+    desc: golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  check:
+    desc: Всё, что должно проходить перед коммитом
+    cmds:
+      - task: build
+      - task: vet
+      - task: test
+
+  migrate:new:
+    desc: "Создать пару миграций: task migrate:new -- add_packages"
+    cmds:
+      - |
+        name="{{.CLI_ARGS}}"
+        case "$name" in
+          ""|*[!a-z0-9_]*) echo "usage: task migrate:new -- snake_case_name" >&2; exit 1 ;;
+        esac
+        ts=$(date -u +%Y%m%d%H%M%S)
+        dir=internal/infra/postgres/migrations
+        : > "$dir/${ts}_${name}.up.sql"
+        : > "$dir/${ts}_${name}.down.sql"
+        echo "created $dir/${ts}_${name}.{up,down}.sql"
+  up:
+    desc: Поднять сервис и Postgres в Docker
+    cmds:
+      - docker compose up --build -d
