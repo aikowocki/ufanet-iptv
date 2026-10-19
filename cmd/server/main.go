@@ -20,6 +20,7 @@ import (
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/auth"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/catalog"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/playback"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/subscription"
 )
 
 func main() {
@@ -78,11 +79,13 @@ func run() error {
 	exec := postgres.NewExecutor(pool)
 	users := postgres.NewUserRepository(exec)
 	channels := postgres.NewChannelRepository(exec)
+	subscriptions := postgres.NewSubscriptionRepository(exec)
 	srv := &http.Server{
 		Handler: rest.NewRouter(log, pool.Ping, rest.Deps{
-			Auth:     auth.New(users, hasher, dummyHash),
-			Channels: catalog.New(channels),
-			Playback: playback.New(channels, signer, cfg.StreamBaseURL, cfg.StreamTokenTTL),
+			Auth:          auth.New(users, hasher, dummyHash),
+			Channels:      catalog.New(channels),
+			Playback:      playback.New(channels, signer, cfg.StreamBaseURL, cfg.StreamTokenTTL),
+			Subscriptions: subscription.New(subscriptions),
 		}),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,

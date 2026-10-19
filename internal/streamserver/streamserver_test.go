@@ -189,3 +189,33 @@ func TestMethodNotAllowed(t *testing.T) {
 		t.Fatalf("status = %d, want 405", rec.Code)
 	}
 }
+
+// Веб-плеер на другом origin должен читать и успешные ответы, и ошибки (иначе браузер
+// скроет статус 403 или 404 и покажет вместо него общую сетевую ошибку).
+func TestCORSHeader(t *testing.T) {
+	h, signer, _ := setup(t, defaultSource())
+	link, err := signer.Sign("http://s/live/1/index.m3u8", 7, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tgt := range map[string]string{
+		"ok":     target(t, link),
+		"denied": "/live/1/index.m3u8",
+		"nope":   target(t, mustSign(t, signer, "http://s/live/1/missing.m3u8")),
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, tgt, nil))
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+			t.Errorf("%s (status %d): Access-Control-Allow-Origin = %q, want *", name, rec.Code, got)
+		}
+	}
+}
+
+func mustSign(t *testing.T, s *stream.Signer, rawURL string) string {
+	t.Helper()
+	link, err := s.Sign(rawURL, 7, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return link
+}

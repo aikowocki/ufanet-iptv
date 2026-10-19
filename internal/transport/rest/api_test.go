@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aikowocki/ufanet-iptv/internal/domain"
 )
@@ -50,8 +51,21 @@ func (f fakePlayback) Link(_ context.Context, _ domain.User, id int64) (string, 
 	return "http://s/live/1/index.m3u8", nil
 }
 
+type fakeSubscriptions struct{ err error }
+
+func (f fakeSubscriptions) List(context.Context, domain.User) ([]domain.Subscription, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	exp := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	return []domain.Subscription{
+		{PackageID: 1, PackageName: "Базовый", Status: domain.SubscriptionActive},
+		{PackageID: 2, PackageName: "Спорт", Status: domain.SubscriptionExpired, ExpiresAt: &exp},
+	}, nil
+}
+
 func newAPI(log *slog.Logger, auth fakeAuth, ch fakeChannels, pb fakePlayback) http.Handler {
-	return NewRouter(log, nil, Deps{Auth: auth, Channels: ch, Playback: pb})
+	return NewRouter(log, nil, Deps{Auth: auth, Channels: ch, Playback: pb, Subscriptions: fakeSubscriptions{}})
 }
 
 func get(h http.Handler, target, user, pass string) *httptest.ResponseRecorder {
@@ -165,5 +179,31 @@ func TestHealthzOpenWithoutAuth(t *testing.T) {
 	rec := get(newAPI(slog.Default(), fakeAuth{}, fakeChannels{}, fakePlayback{}), "/healthz", "", "")
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}
+
+func TestSubscriptionsJSON(t *testing.T) {
+	rec := get(newAPI(slog.Default(), fakeAuth{}, fakeChannels{}, fakePlayback{}), "/api/v1/subscriptions", "alice", "secret")
+	want := `{"subscriptions":[{"package_id":1,"package":"Базовый","status":"active","expires_at":null},` +
+		`{"package_id":2,"package":"Спорт","status":"expired","expires_at":"2026-10-19T12:00:00Z"}]}`
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body)
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != want {
+		t.Errorf("body = %s, want %s", got, want)
+	}
+}
+
+func TestSubscriptionsRequireAuthAndHideErrors(t *testing.T) {
+	h := newAPI(slog.Default(), fakeAuth{}, fakeChannels{}, fakePlayback{})
+	if rec := get(h, "/api/v1/subscriptions", "", ""); rec.Code != http.StatusUnauthorized {
+		t.Errorf("no auth: status = %d, want 401", rec.Code)
+	}
+
+	boom := errors.New("pq: connection refused")
+	failing := NewRouter(slog.Default(), nil, Deps{Auth: fakeAuth{}, Subscriptions: fakeSubscriptions{err: boom}})
+	rec := get(failing, "/api/v1/subscriptions", "alice", "secret")
+	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "pq:") {
+		t.Errorf("status = %d body = %s; want 500 without internals", rec.Code, rec.Body)
 	}
 }

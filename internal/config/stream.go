@@ -13,8 +13,6 @@ type StreamConfig struct {
 
 	// FFmpegBin — исполняемый файл ffmpeg.
 	FFmpegBin string
-	// SourceFile — видеофайл, который по кругу транслируется на всех каналах.
-	SourceFile string
 	// FontFamily — семейство шрифта для названия канала (с кириллицей).
 	FontFamily string
 	// FontsDir — каталог со шрифтами для libass; пусто — системные шрифты.
@@ -36,7 +34,6 @@ func LoadStream(getenv func(string) string) (StreamConfig, error) {
 			HTTPAddr: l.str("STREAM_HTTP_ADDR", ":8081"),
 
 			FFmpegBin:             l.str("FFMPEG_BIN", "ffmpeg"),
-			SourceFile:            l.str("STREAM_SOURCE_FILE", "docs/sample-10s-vp9.mp4"),
 			FontFamily:            l.str("STREAM_FONT_FAMILY", "DejaVu Sans"),
 			FontsDir:              l.str("STREAM_FONTS_DIR", ""),
 			TranscodeIdle:         l.duration("STREAM_IDLE_TIMEOUT", 30*time.Second),

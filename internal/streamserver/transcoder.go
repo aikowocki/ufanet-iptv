@@ -42,8 +42,6 @@ type ChannelFinder interface {
 type Options struct {
 	// FFmpeg — исполняемый файл ffmpeg.
 	FFmpeg string
-	// Input — видеофайл, который крутится по кругу на каждом канале.
-	Input string
 	// FontFamily — семейство шрифта для названия канала (должно содержать кириллицу).
 	// Пусто — канал транслируется без подписи.
 	FontFamily string
@@ -96,14 +94,6 @@ func (s *session) alive() bool {
 // NewTranscoder создаёт Transcoder и запускает фоновую остановку неиспользуемых потоков.
 // Вызывающий обязан вызвать Close.
 func NewTranscoder(log *slog.Logger, channels ChannelFinder, opt Options) (*Transcoder, error) {
-	input, err := filepath.Abs(opt.Input)
-	if err != nil {
-		return nil, fmt.Errorf("input path: %w", err)
-	}
-	if _, err := os.Stat(input); err != nil {
-		return nil, fmt.Errorf("input file: %w", err)
-	}
-	opt.Input = input
 	if opt.FFmpeg == "" {
 		opt.FFmpeg = "ffmpeg"
 	}
@@ -259,7 +249,7 @@ func (t *Transcoder) start(ch domain.Channel) (*session, error) {
 	}
 
 	ctx, cancel := context.WithCancel(t.ctx)
-	cmd := exec.CommandContext(ctx, t.opt.FFmpeg, ffmpegArgs(t.opt)...) //nolint:gosec // бинарник и аргументы заданы конфигурацией
+	cmd := exec.CommandContext(ctx, t.opt.FFmpeg, ffmpegArgs(t.opt, ch.ID)...) //nolint:gosec // бинарник и аргументы заданы конфигурацией
 	cmd.Dir = dir
 	cmd.Stderr = &logWriter{log: t.log.With("channel", ch.Name), level: slog.LevelWarn}
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
@@ -321,12 +311,36 @@ func (t *Transcoder) reap() {
 	}
 }
 
-// ffmpegArgs собирает аргументы ffmpeg. Пути относительные: ffmpeg запускается в каталоге канала.
-func ffmpegArgs(opt Options) []string {
-	args := []string{
-		"-hide_banner", "-loglevel", "warning",
-		"-re", "-stream_loop", "-1", "-i", opt.Input,
+// generatedVideo — набор синтетических видеорядов (фильтры-источники lavfi), все 1280x720, 25 к/с.
+// Канал берёт ряд по своему id, поэтому соседние каналы выглядят по-разному, а один и тот же
+// канал после перезапуска ffmpeg выглядит так же. Тяжёлые генераторы считаются в малом
+// размере и растягиваются.
+var generatedVideo = []string{
+	"gradients=s=1280x720:r=25:speed=0.02:seed=%d",
+	"life=s=320x180:r=25:ratio=0.15:mold=10:random_seed=%d:life_color=#00e0a0:death_color=#101830,format=rgb24,scale=1280:720:flags=neighbor",
+	"cellauto=s=320x180:r=25:rule=110:random_seed=%d:random_fill_ratio=0.4,format=rgb24,scale=1280:720:flags=neighbor",
+	"mandelbrot=s=640x360:r=25,scale=1280:720",
+	"testsrc2=s=1280x720:r=25",
+}
+
+// generatedInput возвращает аргументы входа для синтетического источника канала:
+// видеоряд из generatedVideo и тихий тон, частота которого зависит от канала.
+func generatedInput(channelID int64) []string {
+	n := int64(len(generatedVideo))
+	idx := ((channelID % n) + n) % n
+	video := generatedVideo[idx]
+	if strings.Contains(video, "%d") {
+		video = fmt.Sprintf(video, channelID)
 	}
+	freq := 220 + 110*((channelID%5+5)%5) // 220..660 Гц
+	audio := fmt.Sprintf("sine=frequency=%d:sample_rate=44100,volume=0.1", freq)
+	return []string{"-re", "-f", "lavfi", "-i", video, "-f", "lavfi", "-i", audio}
+}
+
+// ffmpegArgs собирает аргументы ffmpeg. Пути относительные: ffmpeg запускается в каталоге канала.
+// channelID выбирает видеоряд и тон канала.
+func ffmpegArgs(opt Options, channelID int64) []string {
+	args := append([]string{"-hide_banner", "-loglevel", "warning"}, generatedInput(channelID)...)
 	if opt.FontFamily != "" {
 		vf := "ass=filename=label.ass"
 		if opt.FontsDir != "" {

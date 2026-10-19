@@ -19,6 +19,21 @@ tasks:
     cmds:
       - go run ./cmd/stream
 
+  web:install:
+    desc: Установить зависимости фронтенда
+    dir: web
+    cmds:
+      - npm ci
+  web:dev:
+    desc: "Запустить фронтенд (Vite, http://localhost:5173); бэкенд: VITE_API_TARGET, по умолчанию :8090"
+    dir: web
+    cmds:
+      - npm run dev
+  web:build:
+    desc: Проверить типы и собрать фронтенд
+    dir: web
+    cmds:
+      - npm run build
   vet:
     desc: Статическая проверка go vet
     cmds:

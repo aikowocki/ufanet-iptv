@@ -164,7 +164,7 @@ func TestLoadStream(t *testing.T) {
 	if err != nil || cfg.HTTPAddr != ":8081" || cfg.Env != EnvDev || cfg.StreamSigningKey != testKey {
 		t.Fatalf("defaults: %+v, %v", cfg, err)
 	}
-	if cfg.FFmpegBin != "ffmpeg" || cfg.SourceFile != "docs/sample-10s-vp9.mp4" || cfg.FontFamily != "DejaVu Sans" ||
+	if cfg.FFmpegBin != "ffmpeg" || cfg.FontFamily != "DejaVu Sans" ||
 		cfg.TranscodeIdle != 30*time.Second || cfg.TranscodeStartTimeout != 15*time.Second {
 		t.Fatalf("transcoder defaults: %+v", cfg)
 	}
