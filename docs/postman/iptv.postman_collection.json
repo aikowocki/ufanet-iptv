@@ -16,7 +16,15 @@
     { "key": "login", "value": "alice" },
     { "key": "password", "value": "alice123" },
     { "key": "channel_id", "value": "1" },
-    { "key": "locked_channel_id", "value": "3" }
+    { "key": "locked_channel_id", "value": "3" },
+    { "key": "admin_login", "value": "admin" },
+    { "key": "admin_password", "value": "admin123" },
+    { "key": "run_id", "value": "" },
+    { "key": "admin_id", "value": "" },
+    { "key": "new_user_id", "value": "" },
+    { "key": "new_channel_id", "value": "" },
+    { "key": "new_package_id", "value": "" },
+    { "key": "new_sub_id", "value": "" }
   ],
   "item": [
     {
@@ -73,7 +81,7 @@
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
             "pm.test('200', () => pm.response.to.have.status(200));",
             "const body = pm.response.json();",
-            "pm.test('channel_id совпадает', () => pm.expect(String(body.channel_id)).to.eql(pm.collectionVariables.get('channel_id')));",
+            "pm.test('channel_id совпадает', () => pm.expect(String(body.channel_id)).to.eql(String(pm.collectionVariables.get('channel_id'))));",
             "pm.test('url — HLS плейлист', () => pm.expect(body.url).to.match(/^https?:\\/\\/.+\\.m3u8/));"
           ] } }]
         }
@@ -171,6 +179,1281 @@
             "pm.test('Allow', () => pm.expect(pm.response.headers.has('Allow')).to.be.true);",
             "pm.test('JSON-ошибка', () => pm.expect(pm.response.json().error.code).to.eql('method_not_allowed'));"
           ] } }]
+        }
+      ]
+    },
+    {
+      "name": "Админка",
+      "description": "Сквозной сценарий админ-API. Запускать папкой целиком (Runner): запросы связаны переменными run_id, new_*_id. Данные не удаляются, а выключаются в конце. Нужна учётка администратора: admin_login/admin_password.",
+      "auth": {
+        "type": "basic",
+        "basic": [
+          {
+            "key": "username",
+            "value": "{{admin_login}}",
+            "type": "string"
+          },
+          {
+            "key": "password",
+            "value": "{{admin_password}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "403: обычный пользователь",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/users",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{login}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403', () => pm.response.to.have.status(403));",
+                  "pm.test('код forbidden', () => pm.expect(pm.response.json().error.code).to.eql('forbidden'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401: без авторизации",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/users",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Пользователь: создать",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"login\": \"pm_{{run_id}}\", \"password\": \"Passw0rd-{{run_id}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('run_id', String(Date.now() % 900000 + 10000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('new_user_id', String(b.id));",
+                  "pm.test('поля', () => pm.expect(b).to.have.all.keys('id', 'login', 'is_active', 'is_admin'));",
+                  "pm.test('по умолчанию активен, не админ', () => { pm.expect(b.is_active).to.be.true; pm.expect(b.is_admin).to.be.false; });",
+                  "pm.test('нет пароля и хэша в ответе', () => { const t = pm.response.text(); pm.expect(t).to.not.include('password'); pm.expect(t).to.not.include('argon2'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409: логин занят",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"login\": \"pm_{{run_id}}\", \"password\": \"Passw0rd-{{run_id}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409', () => pm.response.to.have.status(409));",
+                  "pm.test('код conflict', () => pm.expect(pm.response.json().error.code).to.eql('conflict'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400: короткий пароль",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"login\": \"pm_short_{{run_id}}\", \"password\": \"short\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('код bad_request', () => pm.expect(pm.response.json().error.code).to.eql('bad_request'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400: двоеточие в логине",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"login\": \"a:b:c\", \"password\": \"password123\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400: неизвестное поле",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"login\": \"pm_x_{{run_id}}\", \"password\": \"password123\", \"is_root\": true}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Пользователи: список",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/users?limit=200"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const users = pm.response.json().users;",
+                  "pm.test('новый пользователь в списке', () => pm.expect(users.some(u => u.login === 'pm_' + pm.collectionVariables.get('run_id'))).to.be.true);",
+                  "const admin = users.find(u => u.login === pm.collectionVariables.get('admin_login'));",
+                  "if (admin) pm.collectionVariables.set('admin_id', String(admin.id));",
+                  "pm.test('нет пароля и хэша в ответе', () => { const t = pm.response.text(); pm.expect(t).to.not.include('password'); pm.expect(t).to.not.include('argon2'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Пользователь: получить",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/users/{{new_user_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('id', () => pm.expect(String(pm.response.json().id)).to.eql(String(pm.collectionVariables.get('new_user_id'))));",
+                  "pm.test('нет пароля и хэша в ответе', () => { const t = pm.response.text(); pm.expect(t).to.not.include('password'); pm.expect(t).to.not.include('argon2'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404: пользователь не найден",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/users/999999999"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));",
+                  "pm.test('код not_found', () => pm.expect(pm.response.json().error.code).to.eql('not_found'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400: некорректный id",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/users/abc"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409: админ не может выключить себя",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/users/{{admin_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"is_active\": false}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409', () => pm.response.to.have.status(409));",
+                  "pm.test('код conflict', () => pm.expect(pm.response.json().error.code).to.eql('conflict'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409: админ не может разжаловать себя",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/users/{{admin_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"is_admin\": false}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400: пустой PATCH",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/users/{{new_user_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Канал: создать",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/channels",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"number\": {{run_id}}, \"name\": \"PM канал {{run_id}}\", \"stream_path\": \"/live/1/index.m3u8\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('new_channel_id', String(b.id));",
+                  "pm.test('активен по умолчанию', () => pm.expect(b.is_active).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409: номер канала занят",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/channels",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"number\": {{run_id}}, \"name\": \"Копия\", \"stream_path\": \"/live/1/index.m3u8\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400: stream_path с адресом",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/channels",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"number\": 1, \"name\": \"Плохой\", \"stream_path\": \"http://evil.example/x\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400: stream_path с ..",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/channels",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"number\": 1, \"name\": \"Плохой\", \"stream_path\": \"/../x\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Каналы: список (включая выключенные)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/channels"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('канал в списке', () => pm.expect(pm.response.json().channels.some(c => String(c.id) === pm.collectionVariables.get('new_channel_id'))).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Канал: переименовать",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/channels/{{new_channel_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"PM канал (переименован)\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('имя', () => pm.expect(pm.response.json().name).to.eql('PM канал (переименован)'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404: PATCH несуществующего канала",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/channels/999999999",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"x\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Пакет: создать",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/packages",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"PM пакет {{run_id}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('new_package_id', String(b.id));",
+                  "pm.test('пустой состав', () => pm.expect(b.channel_ids).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409: имя пакета занято",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/packages",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"PM пакет {{run_id}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Пакет: задать состав",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/api/v1/admin/packages/{{new_package_id}}/channels",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"channel_ids\":[{{new_channel_id}}]}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('канал в составе', () => pm.expect(pm.response.json().channel_ids.map(String)).to.include(pm.collectionVariables.get('new_channel_id')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "422: несуществующий канал в составе",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/api/v1/admin/packages/{{new_package_id}}/channels",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"channel_ids\":[{{new_channel_id}}, 999999999]}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422', () => pm.response.to.have.status(422));",
+                  "pm.test('код unprocessable_entity', () => pm.expect(pm.response.json().error.code).to.eql('unprocessable_entity'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Пакеты: состав не изменился после 422",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/packages"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json().packages.find(p => String(p.id) === pm.collectionVariables.get('new_package_id'));",
+                  "pm.test('прежний состав сохранён', () => pm.expect(p.channel_ids.map(String)).to.eql([pm.collectionVariables.get('new_channel_id')]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404: PUT состава несуществующего пакета",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/api/v1/admin/packages/999999999/channels",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"channel_ids\": []}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400: PUT без channel_ids",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/api/v1/admin/packages/{{new_package_id}}/channels",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подписка: выдать пакет",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/users/{{new_user_id}}/subscriptions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"package_id\": {{new_package_id}}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('new_sub_id', String(b.id));",
+                  "pm.test('бессрочная и активная', () => { pm.expect(b.expires_at).to.be.null; pm.expect(b.is_active).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409: пакет уже выдан",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/users/{{new_user_id}}/subscriptions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"package_id\": {{new_package_id}}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "422: несуществующий пакет",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/users/{{new_user_id}}/subscriptions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"package_id\": 999999999}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422', () => pm.response.to.have.status(422));",
+                  "pm.test('код unprocessable_entity', () => pm.expect(pm.response.json().error.code).to.eql('unprocessable_entity'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404: подписка несуществующему пользователю",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/admin/users/999999999/subscriptions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"package_id\": {{new_package_id}}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подписки пользователя: список",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/admin/users/{{new_user_id}}/subscriptions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('одна подписка', () => pm.expect(pm.response.json().subscriptions).to.have.lengthOf(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Новый пользователь видит канал доступным",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/channels",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "pm_{{run_id}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "Passw0rd-{{run_id}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const c = pm.response.json().channels.find(c => String(c.id) === pm.collectionVariables.get('new_channel_id'));",
+                  "pm.test('канал доступен сразу после выдачи', () => pm.expect(c && c.available).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подписка: ограничить сроком",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/subscriptions/{{new_sub_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expires_at\": \"2099-01-01T00:00:00Z\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('срок задан', () => pm.expect(pm.response.json().expires_at).to.include('2099'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подписка: снова бессрочная (null)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/subscriptions/{{new_sub_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expires_at\": null}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('срок сброшен', () => pm.expect(pm.response.json().expires_at).to.be.null);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400: срок не датой",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/subscriptions/{{new_sub_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"expires_at\": \"tomorrow\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подписка: выключить",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/subscriptions/{{new_sub_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"is_active\": false}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('срок не тронут', () => pm.expect(pm.response.json().expires_at).to.be.null);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Новый пользователь больше не видит канал",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/channels",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "pm_{{run_id}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "Passw0rd-{{run_id}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const c = pm.response.json().channels.find(c => String(c.id) === pm.collectionVariables.get('new_channel_id'));",
+                  "pm.test('канал недоступен после выключения подписки', () => pm.expect(c && c.available).to.be.false);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404: PATCH несуществующей подписки",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/subscriptions/999999999",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"is_active\": false}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Пользователь: сменить пароль",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/users/{{new_user_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\": \"NewPassw0rd-{{run_id}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('нет пароля и хэша в ответе', () => { const t = pm.response.text(); pm.expect(t).to.not.include('password'); pm.expect(t).to.not.include('argon2'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Старый пароль больше не работает",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/channels",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "pm_{{run_id}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "Passw0rd-{{run_id}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Уборка: выключить пользователя",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/users/{{new_user_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"is_active\": false}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Уборка: выключить канал",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/channels/{{new_channel_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"is_active\": false}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Уборка: выключить пакет",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/api/v1/admin/packages/{{new_package_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"is_active\": false}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

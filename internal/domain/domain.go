@@ -65,3 +65,48 @@ var (
 	// ErrBusy — сервис временно перегружен проверкой паролей; запрос можно повторить позже.
 	ErrBusy = errors.New("service is busy")
 )
+
+var (
+	// ErrConflict — запись нарушает уникальность (например, занятый логин или номер канала).
+	ErrConflict = errors.New("conflict")
+	// ErrSelfLockout — админ пытается выключить или разжаловать самого себя.
+	ErrSelfLockout = errors.New("administrator cannot disable or demote themselves")
+)
+
+// ValidationError — входные данные не прошли проверку. Message безопасен для показа клиенту.
+type ValidationError struct{ Message string }
+
+func (e *ValidationError) Error() string { return "validation: " + e.Message }
+
+// Package — пакет каналов.
+type Package struct {
+	ID       int64
+	Name     string
+	IsActive bool
+	// ChannelIDs — id каналов пакета по возрастанию.
+	ChannelIDs []int64
+}
+
+// UserSubscription — запись подписки в админском представлении.
+type UserSubscription struct {
+	ID        int64
+	UserID    int64
+	PackageID int64
+	IsActive  bool
+	// ExpiresAt равен nil для бессрочной подписки.
+	ExpiresAt *time.Time
+	CreatedAt time.Time
+}
+
+// OptionalTime различает «поле не передано» (Set=false), «сбросить в NULL» (Set, Value=nil)
+// и «установить значение» (Set, Value!=nil) в частичных обновлениях.
+type OptionalTime struct {
+	Set   bool
+	Value *time.Time
+}
+
+// ReferenceError — запрос синтаксически верен, но ссылается на несуществующую запись
+// (например, канал в составе пакета). Message безопасен для показа клиенту.
+type ReferenceError struct{ Message string }
+
+func (e *ReferenceError) Error() string { return "reference: " + e.Message }

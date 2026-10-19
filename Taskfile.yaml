@@ -69,7 +69,17 @@ tasks:
         : > "$dir/${ts}_${name}.up.sql"
         : > "$dir/${ts}_${name}.down.sql"
         echo "created $dir/${ts}_${name}.{up,down}.sql"
-  up:
+  docker:up:
     desc: Поднять сервис и Postgres в Docker
     cmds:
+      - docker compose up --build -d
+  docker:down:
+    desc: Остановить контейнеры (данные Postgres сохраняются)
+    cmds:
+      - docker compose down
+
+  docker:reset:
+    desc: Удалить контейнеры и том с базой, затем поднять всё заново (данные будут потеряны)
+    cmds:
+      - docker compose down -v --remove-orphans
       - docker compose up --build -d
