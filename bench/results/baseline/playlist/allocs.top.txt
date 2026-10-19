@@ -1,0 +1,34 @@
+File: stream
+Build ID: fd3b258fd07923a44c34de84b91f09955c7388fa
+Type: alloc_space
+Time: 2026-10-19 13:30:46 CEST
+Duration: 20.01s, Total samples = 6.14GB 
+Showing nodes accounting for 5.93GB, 96.57% of 6.14GB total
+Dropped 60 nodes (cum <= 0.03GB)
+Showing top 25 nodes out of 63
+      flat  flat%   sum%        cum   cum%
+    0.77GB 12.60% 12.60%     0.77GB 12.60%  net/url.Values.Set (inline)
+    0.66GB 10.79% 23.39%     0.66GB 10.79%  net/url.parse
+    0.63GB 10.24% 33.63%     4.23GB 68.95%  github.com/aikowocki/ufanet-iptv/internal/streamserver.signSegments
+    0.59GB  9.63% 43.26%     0.59GB  9.63%  crypto/internal/fips140/sha256.New (inline)
+    0.52GB  8.49% 51.75%     0.52GB  8.49%  internal/bytealg.MakeNoZero
+    0.52GB  8.48% 60.23%     1.11GB 18.11%  crypto/internal/fips140/hmac.New[go.shape.interface { BlockSize int; Reset; Size int; Sum []uint8; Write  }]
+    0.23GB  3.78% 64.01%     0.23GB  3.78%  strings.(*Builder).WriteString (inline)
+    0.23GB  3.72% 67.73%     0.23GB  3.72%  encoding/base64.(*Encoding).EncodeToString
+    0.20GB  3.32% 71.05%     0.21GB  3.41%  net/textproto.readMIMEHeader
+    0.19GB  3.06% 74.11%     0.19GB  3.06%  io.ReadAll
+    0.18GB  2.92% 77.03%     0.18GB  2.92%  net/http.Header.Clone
+    0.15GB  2.51% 79.53%     0.15GB  2.51%  net/textproto.MIMEHeader.Set
+    0.13GB  2.15% 81.68%     0.13GB  2.15%  net/url.parseQuery
+    0.12GB  1.89% 83.57%     0.25GB  4.03%  net/url.ParseQuery (inline)
+    0.11GB  1.86% 85.43%     0.41GB  6.75%  net/http.readRequestLimit
+    0.10GB  1.69% 87.13%     0.56GB  9.12%  net/http.(*conn).readRequest
+    0.10GB  1.56% 88.69%     0.10GB  1.56%  strings.genSplit
+    0.09GB  1.51% 90.20%     0.32GB  5.29%  net/url.Values.Encode
+    0.09GB  1.44% 91.64%     0.09GB  1.44%  time.newTimer
+    0.07GB  1.20% 92.84%     0.07GB  1.20%  crypto/internal/fips140/sha256.(*Digest).Sum
+    0.05GB  0.88% 93.71%     0.09GB  1.54%  time.NewTicker
+    0.05GB  0.83% 94.54%     0.10GB  1.60%  time.NewTimer
+    0.05GB  0.74% 95.28%     1.46GB 23.80%  github.com/aikowocki/ufanet-iptv/internal/infra/stream.(*Signer).sum
+    0.04GB  0.68% 95.97%     0.04GB  0.68%  net/textproto.(*Reader).ReadLine (inline)
+    0.04GB   0.6% 96.57%     0.04GB   0.6%  os.newFile

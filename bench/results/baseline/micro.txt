@@ -1,0 +1,42 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/aikowocki/ufanet-iptv/internal/infra/passhash
+cpu: Apple M3 Pro
+BenchmarkVerify-11            	     112	  20946282 ns/op	19925344 B/op	      28 allocs/op
+BenchmarkVerify-11            	     100	  21252407 ns/op	19925325 B/op	      28 allocs/op
+BenchmarkVerify-11            	     100	  21740491 ns/op	19925285 B/op	      28 allocs/op
+BenchmarkVerifyParallel-11    	     358	   7293357 ns/op	19925551 B/op	      31 allocs/op
+BenchmarkVerifyParallel-11    	     397	   6095488 ns/op	19925539 B/op	      31 allocs/op
+BenchmarkVerifyParallel-11    	     415	   5776968 ns/op	19925523 B/op	      31 allocs/op
+PASS
+ok  	github.com/aikowocki/ufanet-iptv/internal/infra/passhash	16.746s
+goos: darwin
+goarch: arm64
+pkg: github.com/aikowocki/ufanet-iptv/internal/infra/stream
+cpu: Apple M3 Pro
+BenchmarkSign-11          	 2720775	       865.2 ns/op	    1528 B/op	      22 allocs/op
+BenchmarkSign-11          	 2783172	       871.9 ns/op	    1528 B/op	      22 allocs/op
+BenchmarkSign-11          	 2750757	       876.6 ns/op	    1528 B/op	      22 allocs/op
+BenchmarkVerifyLink-11    	 2812885	       846.9 ns/op	    1224 B/op	      16 allocs/op
+BenchmarkVerifyLink-11    	 2915802	       822.0 ns/op	    1224 B/op	      16 allocs/op
+BenchmarkVerifyLink-11    	 2964738	       816.1 ns/op	    1224 B/op	      16 allocs/op
+PASS
+ok  	github.com/aikowocki/ufanet-iptv/internal/infra/stream	14.789s
+goos: darwin
+goarch: arm64
+pkg: github.com/aikowocki/ufanet-iptv/internal/streamserver
+cpu: Apple M3 Pro
+BenchmarkPlaylist-11    	  214072	      9418 ns/op	   21685 B/op	     203 allocs/op
+BenchmarkPlaylist-11    	  264519	      9127 ns/op	   21686 B/op	     203 allocs/op
+BenchmarkPlaylist-11    	  266223	      9213 ns/op	   21686 B/op	     203 allocs/op
+PASS
+ok  	github.com/aikowocki/ufanet-iptv/internal/streamserver	7.292s
+goos: darwin
+goarch: arm64
+pkg: github.com/aikowocki/ufanet-iptv/internal/transport/rest
+cpu: Apple M3 Pro
+BenchmarkChannels-11    	     361	   6326441 ns/op	19941835 B/op	      82 allocs/op
+BenchmarkChannels-11    	     385	   6176603 ns/op	19941531 B/op	      81 allocs/op
+BenchmarkChannels-11    	     381	   6488553 ns/op	19941508 B/op	      81 allocs/op
+PASS
+ok  	github.com/aikowocki/ufanet-iptv/internal/transport/rest	13.705s

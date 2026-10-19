@@ -1,0 +1,34 @@
+File: server
+Build ID: 36357d32900acdba25f6f0cca9b942a7d94d45b4
+Type: cpu
+Time: 2026-10-19 13:28:09 CEST
+Duration: 20.02s, Total samples = 39.78s (198.69%)
+Showing nodes accounting for 38.74s, 97.39% of 39.78s total
+Dropped 217 nodes (cum <= 0.20s)
+Showing top 25 nodes out of 30
+      flat  flat%   sum%        cum   cum%
+    21.43s 53.87% 53.87%     37.91s 95.30%  golang.org/x/crypto/argon2.processBlockGeneric
+    16.45s 41.35% 95.22%     16.45s 41.35%  golang.org/x/crypto/argon2.blamkaGeneric
+     0.61s  1.53% 96.76%      0.61s  1.53%  runtime.memclrNoHeapPointers
+     0.15s  0.38% 97.13%     38.22s 96.08%  golang.org/x/crypto/argon2.processBlocks.func1
+     0.08s   0.2% 97.34%      0.20s   0.5%  runtime.scanObjectsSmall
+     0.01s 0.025% 97.36%      0.45s  1.13%  runtime.gcDrain
+     0.01s 0.025% 97.39%      0.24s   0.6%  runtime.scanSpan
+         0     0% 97.39%      0.72s  1.81%  github.com/aikowocki/ufanet-iptv/internal/infra/passhash.(*Hasher).Verify
+         0     0% 97.39%      0.94s  2.36%  github.com/aikowocki/ufanet-iptv/internal/transport/rest.jsonErrors.func1
+         0     0% 97.39%      0.94s  2.36%  github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.AccessLog.func1.1
+         0     0% 97.39%      0.94s  2.36%  github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.BasicAuth.func2.func1
+         0     0% 97.39%      0.94s  2.36%  github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.Recover.func1.1
+         0     0% 97.39%      0.94s  2.36%  github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.RequestID.func1
+         0     0% 97.39%      0.75s  1.89%  github.com/aikowocki/ufanet-iptv/internal/usecase/auth.(*Service).Authenticate
+         0     0% 97.39%      0.71s  1.78%  golang.org/x/crypto/argon2.IDKey
+         0     0% 97.39%      0.71s  1.78%  golang.org/x/crypto/argon2.deriveKey
+         0     0% 97.39%      0.67s  1.68%  golang.org/x/crypto/argon2.initBlocks
+         0     0% 97.39%     37.80s 95.02%  golang.org/x/crypto/argon2.processBlockXOR (inline)
+         0     0% 97.39%      0.94s  2.36%  net/http.(*ServeMux).ServeHTTP
+         0     0% 97.39%      0.95s  2.39%  net/http.(*conn).serve
+         0     0% 97.39%      0.94s  2.36%  net/http.HandlerFunc.ServeHTTP
+         0     0% 97.39%      0.94s  2.36%  net/http.serverHandler.ServeHTTP
+         0     0% 97.39%      0.49s  1.23%  runtime.gcBgMarkWorker
+         0     0% 97.39%      0.45s  1.13%  runtime.gcBgMarkWorker.func2
+         0     0% 97.39%      0.45s  1.13%  runtime.gcDrainMarkWorkerFractional (inline)

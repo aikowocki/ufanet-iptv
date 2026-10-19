@@ -1,0 +1,226 @@
+goroutine profile: total 112
+50 @ 0x95d78 0x56b80 0x94f70 0xe66c8 0xe706c 0xe705d 0x177bc8 0x180254 0x2821c8 0x9cee4
+#	0x94f6f		internal/poll.runtime_pollWait+0x9f		runtime/netpoll.go:351
+#	0xe66c7		internal/poll.(*pollDesc).wait+0x27		internal/poll/fd_poll_runtime.go:84
+#	0xe706b		internal/poll.(*pollDesc).waitRead+0x22b	internal/poll/fd_poll_runtime.go:89
+#	0xe705c		internal/poll.(*FD).Read+0x21c			internal/poll/fd_unix.go:170
+#	0x177bc7	net.(*netFD).Read+0x27				net/fd_posix.go:68
+#	0x180253	net.(*conn).Read+0x33				net/net.go:196
+#	0x2821c7	net/http.(*connReader).backgroundRead+0x37	net/http/server.go:746
+
+43 @ 0x95d78 0x70008 0x2dab2c 0x2da7c4 0x462314 0x46082c 0x288f48 0x28a6b4 0x461488 0x288f48 0x460d3c 0x288f48 0x4610b4 0x288f48 0x45b1c4 0x288f48 0x291000 0x287940 0x9cee4
+#	0x2dab2b	github.com/aikowocki/ufanet-iptv/internal/infra/passhash.(*Hasher).acquire+0x1db		github.com/aikowocki/ufanet-iptv/internal/infra/passhash/passhash.go:161
+#	0x2da7c3	github.com/aikowocki/ufanet-iptv/internal/infra/passhash.(*Hasher).Verify+0x93			github.com/aikowocki/ufanet-iptv/internal/infra/passhash/passhash.go:130
+#	0x462313	github.com/aikowocki/ufanet-iptv/internal/usecase/auth.(*Service).Authenticate+0x1a3		github.com/aikowocki/ufanet-iptv/internal/usecase/auth/auth.go:53
+#	0x46082b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.BasicAuth.func2.func1+0xab	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/auth.go:46
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x28a6b3	net/http.(*ServeMux).ServeHTTP+0x193								net/http/server.go:2923
+#	0x461487	github.com/aikowocki/ufanet-iptv/internal/transport/rest.jsonErrors.func1+0x177			github.com/aikowocki/ufanet-iptv/internal/transport/rest/router.go:45
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x460d3b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.Recover.func1.1+0x6b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/recover.go:31
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x4610b3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.AccessLog.func1.1+0xb3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/access_log.go:40
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x45b1c3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.RequestID.func1+0x203	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/request_id.go:31
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x290fff	net/http.serverHandler.ServeHTTP+0xaf								net/http/server.go:3436
+#	0x28793f	net/http.(*conn).serve+0x59f									net/http/server.go:2157
+
+2 @ 0x2d8fe8 0x2d9dbc 0x9cee4
+#	0x2d8fe7	golang.org/x/crypto/argon2.indexAlpha+0xf7		golang.org/x/crypto@v0.58.0/argon2/argon2.go:262
+#	0x2d9dbb	golang.org/x/crypto/argon2.processBlocks.func1+0x2fb	golang.org/x/crypto@v0.58.0/argon2/argon2.go:225
+
+2 @ 0x95d78 0x56b80 0x94f70 0xe66c8 0xe706c 0xe705d 0x177bc8 0x180254 0x30da14 0xdf360 0x2dfd0c 0x2e62c4 0x41d2b4 0x41d3bc 0x421f58 0x421c24 0x420554 0x41fe34 0x431ef4 0x44349c 0x4434ad 0x445960 0x455e24 0x4559c0 0x462600 0x45ff84 0x288f48 0x460a58 0x288f48 0x28a6b4 0x461488 0x288f48 0x460d3c 0x288f48 0x4610b4 0x288f48 0x45b1c4 0x288f48 0x291000 0x287940 0x9cee4
+#	0x94f6f		internal/poll.runtime_pollWait+0x9f								runtime/netpoll.go:351
+#	0xe66c7		internal/poll.(*pollDesc).wait+0x27								internal/poll/fd_poll_runtime.go:84
+#	0xe706b		internal/poll.(*pollDesc).waitRead+0x22b							internal/poll/fd_poll_runtime.go:89
+#	0xe705c		internal/poll.(*FD).Read+0x21c									internal/poll/fd_unix.go:170
+#	0x177bc7	net.(*netFD).Read+0x27										net/fd_posix.go:68
+#	0x180253	net.(*conn).Read+0x33										net/net.go:196
+#	0x30da13	github.com/jackc/pgx/v5/pgconn/internal/bgreader.(*BGReader).Read+0xa3				github.com/jackc/pgx/v5@v5.11.0/pgconn/internal/bgreader/bgreader.go:100
+#	0xdf35f		io.ReadAtLeast+0x8f										io/io.go:335
+#	0x2dfd0b	github.com/jackc/pgx/v5/pgproto3.(*chunkReader).Next+0x24b					github.com/jackc/pgx/v5@v5.11.0/pgproto3/chunkreader.go:80
+#	0x2e62c3	github.com/jackc/pgx/v5/pgproto3.(*Frontend).Receive+0x33					github.com/jackc/pgx/v5@v5.11.0/pgproto3/frontend.go:313
+#	0x41d2b3	github.com/jackc/pgx/v5/pgconn.(*PgConn).peekMessage+0x183					github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:643
+#	0x41d3bb	github.com/jackc/pgx/v5/pgconn.(*PgConn).receiveMessage+0x2b					github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:667
+#	0x421f57	github.com/jackc/pgx/v5/pgconn.(*ResultReader).receiveMessage+0x37				github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1921
+#	0x421c23	github.com/jackc/pgx/v5/pgconn.(*ResultReader).readUntilRowDescription+0x53			github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1888
+#	0x420553	github.com/jackc/pgx/v5/pgconn.(*PgConn).execExtendedSuffix+0x173				github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1388
+#	0x41fe33	github.com/jackc/pgx/v5/pgconn.(*PgConn).ExecStatement+0x103					github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1328
+#	0x431ef3	github.com/jackc/pgx/v5.(*Conn).Query+0xeb3							github.com/jackc/pgx/v5@v5.11.0/conn.go:857
+#	0x44349b	github.com/jackc/pgx/v5.(*Conn).QueryRow+0x4b							github.com/jackc/pgx/v5@v5.11.0/conn.go:941
+#	0x4434ac	github.com/jackc/pgx/v5/pgxpool.(*Conn).QueryRow+0x5c						github.com/jackc/pgx/v5@v5.11.0/pgxpool/conn.go:94
+#	0x44595f	github.com/jackc/pgx/v5/pgxpool.(*Pool).QueryRow+0x5f						github.com/jackc/pgx/v5@v5.11.0/pgxpool/pool.go:797
+#	0x455e23	github.com/aikowocki/ufanet-iptv/internal/infra/postgres.(*Executor).QueryRow+0x63		github.com/aikowocki/ufanet-iptv/internal/infra/postgres/db.go:38
+#	0x4559bf	github.com/aikowocki/ufanet-iptv/internal/infra/postgres.(*ChannelRepository).GetChannel+0xcf	github.com/aikowocki/ufanet-iptv/internal/infra/postgres/channels.go:92
+#	0x4625ff	github.com/aikowocki/ufanet-iptv/internal/usecase/playback.(*Service).Link+0x4f			github.com/aikowocki/ufanet-iptv/internal/usecase/playback/playback.go:45
+#	0x45ff83	github.com/aikowocki/ufanet-iptv/internal/transport/rest.api.handlePlayback+0x1d3		github.com/aikowocki/ufanet-iptv/internal/transport/rest/api.go:128
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x460a57	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.BasicAuth.func2.func1+0x2d7	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/auth.go:49
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x28a6b3	net/http.(*ServeMux).ServeHTTP+0x193								net/http/server.go:2923
+#	0x461487	github.com/aikowocki/ufanet-iptv/internal/transport/rest.jsonErrors.func1+0x177			github.com/aikowocki/ufanet-iptv/internal/transport/rest/router.go:45
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x460d3b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.Recover.func1.1+0x6b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/recover.go:31
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x4610b3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.AccessLog.func1.1+0xb3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/access_log.go:40
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x45b1c3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.RequestID.func1+0x203	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/request_id.go:31
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x290fff	net/http.serverHandler.ServeHTTP+0xaf								net/http/server.go:3436
+#	0x28793f	net/http.(*conn).serve+0x59f									net/http/server.go:2157
+
+2 @ 0x95d78 0x56b80 0x94f70 0xe66c8 0xe706c 0xe705d 0x177bc8 0x180254 0x30da14 0xdf360 0x2dfd0c 0x2e62c4 0x41d2b4 0x41d3bc 0x421f58 0x421c24 0x420554 0x41fe34 0x431ef4 0x44349c 0x4434ad 0x445960 0x455e24 0x458be4 0x4621c4 0x46082c 0x288f48 0x28a6b4 0x461488 0x288f48 0x460d3c 0x288f48 0x4610b4 0x288f48 0x45b1c4 0x288f48 0x291000 0x287940 0x9cee4
+#	0x94f6f		internal/poll.runtime_pollWait+0x9f								runtime/netpoll.go:351
+#	0xe66c7		internal/poll.(*pollDesc).wait+0x27								internal/poll/fd_poll_runtime.go:84
+#	0xe706b		internal/poll.(*pollDesc).waitRead+0x22b							internal/poll/fd_poll_runtime.go:89
+#	0xe705c		internal/poll.(*FD).Read+0x21c									internal/poll/fd_unix.go:170
+#	0x177bc7	net.(*netFD).Read+0x27										net/fd_posix.go:68
+#	0x180253	net.(*conn).Read+0x33										net/net.go:196
+#	0x30da13	github.com/jackc/pgx/v5/pgconn/internal/bgreader.(*BGReader).Read+0xa3				github.com/jackc/pgx/v5@v5.11.0/pgconn/internal/bgreader/bgreader.go:100
+#	0xdf35f		io.ReadAtLeast+0x8f										io/io.go:335
+#	0x2dfd0b	github.com/jackc/pgx/v5/pgproto3.(*chunkReader).Next+0x24b					github.com/jackc/pgx/v5@v5.11.0/pgproto3/chunkreader.go:80
+#	0x2e62c3	github.com/jackc/pgx/v5/pgproto3.(*Frontend).Receive+0x33					github.com/jackc/pgx/v5@v5.11.0/pgproto3/frontend.go:313
+#	0x41d2b3	github.com/jackc/pgx/v5/pgconn.(*PgConn).peekMessage+0x183					github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:643
+#	0x41d3bb	github.com/jackc/pgx/v5/pgconn.(*PgConn).receiveMessage+0x2b					github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:667
+#	0x421f57	github.com/jackc/pgx/v5/pgconn.(*ResultReader).receiveMessage+0x37				github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1921
+#	0x421c23	github.com/jackc/pgx/v5/pgconn.(*ResultReader).readUntilRowDescription+0x53			github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1888
+#	0x420553	github.com/jackc/pgx/v5/pgconn.(*PgConn).execExtendedSuffix+0x173				github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1388
+#	0x41fe33	github.com/jackc/pgx/v5/pgconn.(*PgConn).ExecStatement+0x103					github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1328
+#	0x431ef3	github.com/jackc/pgx/v5.(*Conn).Query+0xeb3							github.com/jackc/pgx/v5@v5.11.0/conn.go:857
+#	0x44349b	github.com/jackc/pgx/v5.(*Conn).QueryRow+0x4b							github.com/jackc/pgx/v5@v5.11.0/conn.go:941
+#	0x4434ac	github.com/jackc/pgx/v5/pgxpool.(*Conn).QueryRow+0x5c						github.com/jackc/pgx/v5@v5.11.0/pgxpool/conn.go:94
+#	0x44595f	github.com/jackc/pgx/v5/pgxpool.(*Pool).QueryRow+0x5f						github.com/jackc/pgx/v5@v5.11.0/pgxpool/pool.go:797
+#	0x455e23	github.com/aikowocki/ufanet-iptv/internal/infra/postgres.(*Executor).QueryRow+0x63		github.com/aikowocki/ufanet-iptv/internal/infra/postgres/db.go:38
+#	0x458be3	github.com/aikowocki/ufanet-iptv/internal/infra/postgres.(*UserRepository).GetUserByLogin+0xd3	github.com/aikowocki/ufanet-iptv/internal/infra/postgres/users.go:22
+#	0x4621c3	github.com/aikowocki/ufanet-iptv/internal/usecase/auth.(*Service).Authenticate+0x53		github.com/aikowocki/ufanet-iptv/internal/usecase/auth/auth.go:43
+#	0x46082b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.BasicAuth.func2.func1+0xab	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/auth.go:46
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x28a6b3	net/http.(*ServeMux).ServeHTTP+0x193								net/http/server.go:2923
+#	0x461487	github.com/aikowocki/ufanet-iptv/internal/transport/rest.jsonErrors.func1+0x177			github.com/aikowocki/ufanet-iptv/internal/transport/rest/router.go:45
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x460d3b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.Recover.func1.1+0x6b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/recover.go:31
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x4610b3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.AccessLog.func1.1+0xb3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/access_log.go:40
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x45b1c3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.RequestID.func1+0x203	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/request_id.go:31
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x290fff	net/http.serverHandler.ServeHTTP+0xaf								net/http/server.go:3436
+#	0x28793f	net/http.(*conn).serve+0x59f									net/http/server.go:2157
+
+2 @ 0x95d78 0x56b80 0x94f70 0xe66c8 0xe78e0 0xe78d1 0x1785d8 0x187154 0x1866ac 0x28bc78 0x2d6fe8 0x9cee4
+#	0x94f6f		internal/poll.runtime_pollWait+0x9f					runtime/netpoll.go:351
+#	0xe66c7		internal/poll.(*pollDesc).wait+0x27					internal/poll/fd_poll_runtime.go:84
+#	0xe78df		internal/poll.(*pollDesc).waitRead+0x20f				internal/poll/fd_poll_runtime.go:89
+#	0xe78d0		internal/poll.(*FD).Accept+0x200					internal/poll/fd_unix.go:618
+#	0x1785d7	net.(*netFD).accept+0x27						net/fd_unix.go:149
+#	0x187153	net.(*TCPListener).accept+0x23						net/tcpsock_posix.go:159
+#	0x1866ab	net.(*TCPListener).Accept+0x2b						net/tcpsock.go:387
+#	0x28bc77	net/http.(*Server).Serve+0x2a7						net/http/server.go:3574
+#	0x2d6fe7	github.com/aikowocki/ufanet-iptv/internal/httpserve.Serve.func1+0x27	github.com/aikowocki/ufanet-iptv/internal/httpserve/httpserve.go:18
+
+2 @ 0x95d78 0x70ad4 0x70ab5 0x97398 0xa5434 0x2d8be8 0x2d8618 0x2d84bc 0x2da824 0x462314 0x46082c 0x288f48 0x28a6b4 0x461488 0x288f48 0x460d3c 0x288f48 0x4610b4 0x288f48 0x45b1c4 0x288f48 0x291000 0x287940 0x9cee4
+#	0x97397		sync.runtime_SemacquireWaitGroup+0x37								runtime/sema.go:114
+#	0xa5433		sync.(*WaitGroup).Wait+0xa3									sync/waitgroup.go:206
+#	0x2d8be7	golang.org/x/crypto/argon2.processBlocks+0xd7							golang.org/x/crypto@v0.58.0/argon2/argon2.go:239
+#	0x2d8617	golang.org/x/crypto/argon2.deriveKey+0x107							golang.org/x/crypto@v0.58.0/argon2/argon2.go:119
+#	0x2d84bb	golang.org/x/crypto/argon2.IDKey+0x6b								golang.org/x/crypto@v0.58.0/argon2/argon2.go:102
+#	0x2da823	github.com/aikowocki/ufanet-iptv/internal/infra/passhash.(*Hasher).Verify+0xf3			github.com/aikowocki/ufanet-iptv/internal/infra/passhash/passhash.go:136
+#	0x462313	github.com/aikowocki/ufanet-iptv/internal/usecase/auth.(*Service).Authenticate+0x1a3		github.com/aikowocki/ufanet-iptv/internal/usecase/auth/auth.go:53
+#	0x46082b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.BasicAuth.func2.func1+0xab	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/auth.go:46
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x28a6b3	net/http.(*ServeMux).ServeHTTP+0x193								net/http/server.go:2923
+#	0x461487	github.com/aikowocki/ufanet-iptv/internal/transport/rest.jsonErrors.func1+0x177			github.com/aikowocki/ufanet-iptv/internal/transport/rest/router.go:45
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x460d3b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.Recover.func1.1+0x6b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/recover.go:31
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x4610b3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.AccessLog.func1.1+0xb3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/access_log.go:40
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x45b1c3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.RequestID.func1+0x203	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/request_id.go:31
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37								net/http/server.go:2358
+#	0x290fff	net/http.serverHandler.ServeHTTP+0xaf								net/http/server.go:3436
+#	0x28793f	net/http.(*conn).serve+0x59f									net/http/server.go:2157
+
+1 @ 0x2a914 0x97fd4 0x295c4c 0x9cee4
+#	0x97fd3		os/signal.signal_recv+0x113	runtime/sigqueue.go:152
+#	0x295c4b	os/signal.loop+0x1b		os/signal/signal_unix.go:23
+
+1 @ 0x536ac 0x94b04 0x2c1624 0x2c12d0 0x2beb34 0x2d3474 0x2d3ca0 0x288f48 0x28a6b4 0x291000 0x287940 0x9cee4
+#	0x2c1623	runtime/pprof.writeRuntimeProfile+0xb3	runtime/pprof/pprof.go:848
+#	0x2c12cf	runtime/pprof.writeGoroutine+0x4f	runtime/pprof/pprof.go:781
+#	0x2beb33	runtime/pprof.(*Profile).WriteTo+0x143	runtime/pprof/pprof.go:405
+#	0x2d3473	net/http/pprof.handler.ServeHTTP+0x433	net/http/pprof/pprof.go:272
+#	0x2d3c9f	net/http/pprof.Index+0xaf		net/http/pprof/pprof.go:391
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37	net/http/server.go:2358
+#	0x28a6b3	net/http.(*ServeMux).ServeHTTP+0x193	net/http/server.go:2923
+#	0x290fff	net/http.serverHandler.ServeHTTP+0xaf	net/http/server.go:3436
+#	0x28793f	net/http.(*conn).serve+0x59f		net/http/server.go:2157
+
+1 @ 0x95d78 0x56b80 0x94f70 0xe66c8 0xe706c 0xe705d 0x177bc8 0x180254 0x30da14 0xdf360 0x2dfd0c 0x2e62c4 0x41d2b4 0x41d3bc 0x421f58 0x421c24 0x420554 0x41fe34 0x431ef4 0x44349c 0x4434ad 0x445960 0x455e24 0x4557c8 0x462658 0x45ff84 0x288f48 0x460a58 0x288f48 0x28a6b4 0x461488 0x288f48 0x460d3c 0x288f48 0x4610b4 0x288f48 0x45b1c4 0x288f48 0x291000 0x287940 0x9cee4
+#	0x94f6f		internal/poll.runtime_pollWait+0x9f									runtime/netpoll.go:351
+#	0xe66c7		internal/poll.(*pollDesc).wait+0x27									internal/poll/fd_poll_runtime.go:84
+#	0xe706b		internal/poll.(*pollDesc).waitRead+0x22b								internal/poll/fd_poll_runtime.go:89
+#	0xe705c		internal/poll.(*FD).Read+0x21c										internal/poll/fd_unix.go:170
+#	0x177bc7	net.(*netFD).Read+0x27											net/fd_posix.go:68
+#	0x180253	net.(*conn).Read+0x33											net/net.go:196
+#	0x30da13	github.com/jackc/pgx/v5/pgconn/internal/bgreader.(*BGReader).Read+0xa3					github.com/jackc/pgx/v5@v5.11.0/pgconn/internal/bgreader/bgreader.go:100
+#	0xdf35f		io.ReadAtLeast+0x8f											io/io.go:335
+#	0x2dfd0b	github.com/jackc/pgx/v5/pgproto3.(*chunkReader).Next+0x24b						github.com/jackc/pgx/v5@v5.11.0/pgproto3/chunkreader.go:80
+#	0x2e62c3	github.com/jackc/pgx/v5/pgproto3.(*Frontend).Receive+0x33						github.com/jackc/pgx/v5@v5.11.0/pgproto3/frontend.go:313
+#	0x41d2b3	github.com/jackc/pgx/v5/pgconn.(*PgConn).peekMessage+0x183						github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:643
+#	0x41d3bb	github.com/jackc/pgx/v5/pgconn.(*PgConn).receiveMessage+0x2b						github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:667
+#	0x421f57	github.com/jackc/pgx/v5/pgconn.(*ResultReader).receiveMessage+0x37					github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1921
+#	0x421c23	github.com/jackc/pgx/v5/pgconn.(*ResultReader).readUntilRowDescription+0x53				github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1888
+#	0x420553	github.com/jackc/pgx/v5/pgconn.(*PgConn).execExtendedSuffix+0x173					github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1388
+#	0x41fe33	github.com/jackc/pgx/v5/pgconn.(*PgConn).ExecStatement+0x103						github.com/jackc/pgx/v5@v5.11.0/pgconn/pgconn.go:1328
+#	0x431ef3	github.com/jackc/pgx/v5.(*Conn).Query+0xeb3								github.com/jackc/pgx/v5@v5.11.0/conn.go:857
+#	0x44349b	github.com/jackc/pgx/v5.(*Conn).QueryRow+0x4b								github.com/jackc/pgx/v5@v5.11.0/conn.go:941
+#	0x4434ac	github.com/jackc/pgx/v5/pgxpool.(*Conn).QueryRow+0x5c							github.com/jackc/pgx/v5@v5.11.0/pgxpool/conn.go:94
+#	0x44595f	github.com/jackc/pgx/v5/pgxpool.(*Pool).QueryRow+0x5f							github.com/jackc/pgx/v5@v5.11.0/pgxpool/pool.go:797
+#	0x455e23	github.com/aikowocki/ufanet-iptv/internal/infra/postgres.(*Executor).QueryRow+0x63			github.com/aikowocki/ufanet-iptv/internal/infra/postgres/db.go:38
+#	0x4557c7	github.com/aikowocki/ufanet-iptv/internal/infra/postgres.(*ChannelRepository).HasChannelAccess+0xe7	github.com/aikowocki/ufanet-iptv/internal/infra/postgres/channels.go:80
+#	0x462657	github.com/aikowocki/ufanet-iptv/internal/usecase/playback.(*Service).Link+0xa7				github.com/aikowocki/ufanet-iptv/internal/usecase/playback/playback.go:55
+#	0x45ff83	github.com/aikowocki/ufanet-iptv/internal/transport/rest.api.handlePlayback+0x1d3			github.com/aikowocki/ufanet-iptv/internal/transport/rest/api.go:128
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37									net/http/server.go:2358
+#	0x460a57	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.BasicAuth.func2.func1+0x2d7		github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/auth.go:49
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37									net/http/server.go:2358
+#	0x28a6b3	net/http.(*ServeMux).ServeHTTP+0x193									net/http/server.go:2923
+#	0x461487	github.com/aikowocki/ufanet-iptv/internal/transport/rest.jsonErrors.func1+0x177				github.com/aikowocki/ufanet-iptv/internal/transport/rest/router.go:45
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37									net/http/server.go:2358
+#	0x460d3b	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.Recover.func1.1+0x6b		github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/recover.go:31
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37									net/http/server.go:2358
+#	0x4610b3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.AccessLog.func1.1+0xb3		github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/access_log.go:40
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37									net/http/server.go:2358
+#	0x45b1c3	github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.RequestID.func1+0x203		github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware/request_id.go:31
+#	0x288f47	net/http.HandlerFunc.ServeHTTP+0x37									net/http/server.go:2358
+#	0x290fff	net/http.serverHandler.ServeHTTP+0xaf									net/http/server.go:3436
+#	0x28793f	net/http.(*conn).serve+0x59f										net/http/server.go:2157
+
+1 @ 0x95d78 0x70008 0x296044 0x9cee4
+#	0x296043	os/signal.NotifyContext.func1+0x73	os/signal/signal.go:304
+
+1 @ 0x95d78 0x70008 0x2d6954 0x2d7040 0x9cee4
+#	0x2d6953	github.com/aikowocki/ufanet-iptv/internal/httpserve.Serve+0x103			github.com/aikowocki/ufanet-iptv/internal/httpserve/httpserve.go:20
+#	0x2d703f	github.com/aikowocki/ufanet-iptv/internal/httpserve.StartPprof.func1+0x2f	github.com/aikowocki/ufanet-iptv/internal/httpserve/pprof.go:45
+
+1 @ 0x95d78 0x70008 0x2d6954 0x463bbc 0x462b2c 0x5d540 0x9cee4
+#	0x2d6953	github.com/aikowocki/ufanet-iptv/internal/httpserve.Serve+0x103	github.com/aikowocki/ufanet-iptv/internal/httpserve/httpserve.go:20
+#	0x463bbb	main.run+0x101b							github.com/aikowocki/ufanet-iptv/cmd/server/main.go:110
+#	0x462b2b	main.main+0x1b							github.com/aikowocki/ufanet-iptv/cmd/server/main.go:28
+#	0x5d53f		runtime.main+0x37f						runtime/proc.go:302
+
+1 @ 0x95d78 0x70008 0x444a60 0x44662c 0x9cee4
+#	0x444a5f	github.com/jackc/pgx/v5/pgxpool.(*Pool).backgroundHealthCheck+0x9f	github.com/jackc/pgx/v5@v5.11.0/pgxpool/pool.go:510
+#	0x44662b	github.com/jackc/pgx/v5/pgxpool.NewWithConfig.func5+0x3b		github.com/jackc/pgx/v5@v5.11.0/pgxpool/pool.go:337
+
+1 @ 0x9cee4
+
+1 @ 0xe63b4 0xe6db8 0x177ab0 0x180530 0x286f70 0x28ffa0 0x287af0 0x9cee4
+#	0xe63b3		internal/poll.(*FD).decref+0xc3		internal/poll/fd_mutex.go:222
+#	0xe6db7		internal/poll.(*FD).Close+0x47		internal/poll/fd_unix.go:105
+#	0x177aaf	net.(*netFD).Close+0x3f			net/fd_posix.go:50
+#	0x18052f	net.(*conn).Close+0x2f			net/net.go:220
+#	0x286f6f	net/http.(*conn).close+0x2f		net/http/server.go:1812
+#	0x28ff9f	net/http.(*conn).serve.func1+0x18f	net/http/server.go:1971
+#	0x287aef	net/http.(*conn).serve+0x74f		net/http/server.go:2203
+

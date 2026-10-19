@@ -1,0 +1,4 @@
+NAME                   CPU %     MEM USAGE / LIMIT
+iptv-load-app-1        200.04%   108.1MiB / 1GiB
+iptv-load-postgres-1   2.19%     53.02MiB / 7.654GiB
+iptv-load-stream-1     0.01%     7.406MiB / 1GiB
