@@ -84,6 +84,20 @@
             "pm.test('channel_id совпадает', () => pm.expect(String(body.channel_id)).to.eql(String(pm.collectionVariables.get('channel_id'))));",
             "pm.test('url — HLS плейлист', () => pm.expect(body.url).to.match(/^https?:\\/\\/.+\\.m3u8/));"
           ] } }]
+        },
+        {
+          "name": "Мои подписки (статус и срок)",
+          "request": { "method": "GET", "url": "{{base_url}}/api/v1/subscriptions" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.test('список подписок', () => pm.expect(body.subscriptions).to.be.an('array').that.is.not.empty);",
+            "pm.test('поля подписки', () => {",
+            "  const s = body.subscriptions[0];",
+            "  pm.expect(s).to.have.all.keys('package_id', 'package', 'status', 'expires_at');",
+            "  pm.expect(s.status).to.be.oneOf(['active', 'expired', 'disabled']);",
+            "});"
+          ] } }]
         }
       ]
     },

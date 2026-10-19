@@ -1,6 +1,6 @@
 module github.com/aikowocki/ufanet-iptv
 
-go 1.27.2
+go 1.26.0
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.20.1
