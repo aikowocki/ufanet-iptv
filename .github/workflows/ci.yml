@@ -9,6 +9,19 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.14.0
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -37,8 +50,13 @@ jobs:
         run: go vet ./...
       # CI=true заставляет интеграционные тесты падать, а не пропускаться,
       # если TEST_DATABASE_URL не задан.
-      - name: Test
-        run: go test -race -count=1 ./...
+      - name: Test with coverage
+        run: go test -race -count=1 ./... -covermode=atomic -coverpkg=./... -coverprofile=coverage.out
         env:
           CI: "true"
           TEST_DATABASE_URL: postgres://iptv:iptv@localhost:5432/iptv_test?sslmode=disable
+      # Порог и исключения лежат в .testcoverage.yml.
+      - name: Check coverage threshold
+        run: |
+          go install github.com/vladopajic/go-test-coverage/v2@v2.20.0
+          "$(go env GOPATH)/bin/go-test-coverage" --config=./.testcoverage.yml

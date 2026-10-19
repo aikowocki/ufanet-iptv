@@ -1,0 +1,11 @@
+profile: coverage.out
+
+threshold:
+  file: 50
+  package: 50
+  total: 70
+
+exclude:
+  paths:
+    # Точки входа: только сборка зависимостей и запуск.
+    - ^cmd/

@@ -29,7 +29,7 @@ const MinSigningKeyLen = 32
 const DevSigningKey = "dev-only-insecure-stream-signing-key"
 
 //nolint:gosec // учебный пароль для локального запуска, не секрет
-const defaultDatabaseURL = "postgres://iptv:iptv@localhost:5442/iptv?sslmode=disable"
+const defaultDatabaseURL = "postgres://iptv:iptv@localhost:5482/iptv?sslmode=disable"
 
 // Common — настройки, одинаковые у API и стрим-сервера.
 type Common struct {
