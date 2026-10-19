@@ -3,10 +3,97 @@ package postgres
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/aikowocki/ufanet-iptv/internal/domain"
 )
+
+// Интеграционный тест SQL-логики подписок: бессрочная, срок истёк, срок идёт,
+// выключенная подписка, выключенный пакет, выключенный канал, чужая подписка.
+func TestChannelAccess(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	repo := NewChannelRepository(NewExecutor(pool))
+
+	mustExec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, sql, args...); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+	}
+	mustExec(`INSERT INTO users (login, password_hash) VALUES ('u','h'),('other','h')`)
+	mustExec(`INSERT INTO channels (number, name, stream_path, is_active) VALUES
+		(1,'forever','/1',true),(2,'expired','/2',true),(3,'future','/3',true),
+		(4,'sub-off','/4',true),(5,'pkg-off','/5',true),(6,'ch-off','/6',false),(7,'nobody','/7',true)`)
+	mustExec(`INSERT INTO packages (name, is_active) VALUES
+		('p1',true),('p2',true),('p3',true),('p4',true),('p5',false),('p6',true)`)
+	// Каналы 1..6 лежат в пакетах p1..p6 соответственно (канал 5 в выключенном p5).
+	mustExec(`INSERT INTO package_channels (package_id, channel_id)
+		SELECT p.id, c.id FROM packages p JOIN channels c ON c.number = substr(p.name, 2)::int`)
+	mustExec(`INSERT INTO subscriptions (user_id, package_id, is_active, expires_at)
+		SELECT u.id, p.id, s.active, s.exp FROM users u, packages p,
+		(VALUES ('p1', true,  NULL::timestamptz),
+		        ('p2', true,  now() - interval '1 minute'),
+		        ('p3', true,  now() + interval '1 hour'),
+		        ('p4', false, NULL),
+		        ('p5', true,  NULL),
+		        ('p6', true,  NULL)) AS s(pkg, active, exp)
+		WHERE u.login = 'u' AND p.name = s.pkg`)
+	mustExec(`INSERT INTO subscriptions (user_id, package_id)
+		SELECT u.id, p.id FROM users u, packages p WHERE u.login = 'other' AND p.name = 'p4'`)
+
+	userID := func(login string) int64 {
+		t.Helper()
+		var id int64
+		if err := pool.QueryRow(ctx, `SELECT id FROM users WHERE login = $1`, login).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	u, other := userID("u"), userID("other")
+
+	// Список содержит все включённые каналы (кроме выключенного 6), доступные помечены.
+	avail := func(userID int64) (all, available []int) {
+		t.Helper()
+		list, err := repo.ListChannelsForUser(ctx, userID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range list {
+			all = append(all, c.Number)
+			if c.Available {
+				available = append(available, c.Number)
+			}
+		}
+		return all, available
+	}
+	all, got := avail(u)
+	if !slices.Equal(all, []int{1, 2, 3, 4, 5, 7}) || !slices.Equal(got, []int{1, 3}) {
+		t.Errorf("user u: all = %v, available = %v; want [1 2 3 4 5 7] / [1 3]", all, got)
+	}
+	if all, got = avail(other); len(all) != 6 || !slices.Equal(got, []int{4}) {
+		t.Errorf("other user: all = %v, available = %v; want 6 channels, only 4 available", all, got)
+	}
+
+	for number, want := range map[int]bool{1: true, 2: false, 3: true, 4: false, 5: false, 6: false, 7: false} {
+		var chID int64
+		if err := pool.QueryRow(ctx, `SELECT id FROM channels WHERE number = $1`, number).Scan(&chID); err != nil {
+			t.Fatal(err)
+		}
+		ok, err := repo.HasChannelAccess(ctx, u, chID)
+		if err != nil || ok != want {
+			t.Errorf("HasChannelAccess(channel %d) = %v, %v; want %v", number, ok, err, want)
+		}
+	}
+
+	// Подписка с истёкшим сроком перестаёт действовать без вмешательства администратора.
+	mustExec(`UPDATE subscriptions SET expires_at = now() - interval '1 second'
+		WHERE user_id = $1 AND package_id = (SELECT id FROM packages WHERE name = 'p3')`, u)
+	if _, got = avail(u); !slices.Equal(got, []int{1}) {
+		t.Errorf("after expiry available = %v, want [1]", got)
+	}
+}
 
 // Интеграционный тест: пропускается без TEST_DATABASE_URL.
 func TestChannelRepository(t *testing.T) {
@@ -29,5 +116,15 @@ func TestChannelRepository(t *testing.T) {
 	}
 	if _, err := repo.GetChannel(ctx, 1<<40); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("missing channel err = %v, want ErrNotFound", err)
+	}
+
+	byPath, err := repo.GetChannelByStreamPath(ctx, "/b")
+	if err != nil || byPath.Name != "B" {
+		t.Fatalf("GetChannelByStreamPath(/b) = %+v, %v", byPath, err)
+	}
+	for _, p := range []string{"/c", "/missing"} { // выключенный и несуществующий
+		if _, err := repo.GetChannelByStreamPath(ctx, p); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("GetChannelByStreamPath(%q) err = %v, want ErrNotFound", p, err)
+		}
 	}
 }

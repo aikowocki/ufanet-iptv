@@ -28,7 +28,7 @@ type errResponse struct {
 func do(t *testing.T, h http.Handler, method, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(method, target, nil))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), method, target, nil))
 	return rec
 }
 

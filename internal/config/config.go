@@ -1,4 +1,8 @@
-// Package config загружает конфигурацию сервиса из переменных окружения.
+// Package config загружает конфигурацию сервисов из переменных окружения.
+//
+// Здесь лежит общее для API и стрим-сервера: режим работы, логи, ключ подписи ссылок,
+// таймауты HTTP и подключение к БД. Настройки самих сервисов описаны рядом:
+// server.go (cmd/server) и stream.go (cmd/stream).
 package config
 
 import (
@@ -6,77 +10,99 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Режимы работы сервиса.
+// Режимы работы сервисов.
 const (
 	EnvDev  = "dev"
 	EnvProd = "prod"
 )
 
-// Config содержит все настройки сервиса. Значения по умолчанию подходят
-// для локального запуска.
-type Config struct {
-	HTTPAddr string
-	LogLevel slog.Level
+// MinSigningKeyLen — минимальная длина STREAM_SIGNING_KEY в prod, в байтах.
+const MinSigningKeyLen = 32
 
+// DevSigningKey используется только в dev, когда ключ не задан.
+const DevSigningKey = "dev-only-insecure-stream-signing-key"
+
+//nolint:gosec // учебный пароль для локального запуска, не секрет
+const defaultDatabaseURL = "postgres://iptv:iptv@localhost:5442/iptv?sslmode=disable"
+
+// Common — настройки, одинаковые у API и стрим-сервера.
+type Common struct {
+	// Env — режим работы: EnvDev (по умолчанию) или EnvProd.
+	Env      string
+	LogLevel slog.Level
+	// StreamSigningKey — секрет HMAC для подписи ссылок на потоки. API подписывает им ссылки,
+	// стрим-сервер проверяет, поэтому у обоих он должен совпадать. В prod обязателен
+	// и должен быть не короче MinSigningKeyLen байт; в dev есть небезопасное значение по умолчанию.
+	StreamSigningKey string
+}
+
+// UsesDevSigningKey сообщает, что в dev ключ не задан и взят небезопасный по умолчанию.
+func (c Common) UsesDevSigningKey() bool {
+	return c.Env == EnvDev && c.StreamSigningKey == DevSigningKey
+}
+
+// HTTPTimeouts — таймауты http.Server и остановки.
+type HTTPTimeouts struct {
 	ReadHeaderTimeout time.Duration
 	ReadTimeout       time.Duration
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	// ShutdownTimeout ограничивает время ожидания завершения текущих запросов.
 	ShutdownTimeout time.Duration
-
-	// DatabaseURL — строка подключения к Postgres.
-	DatabaseURL string
-	// DBConnectTimeout ограничивает ожидание доступности БД при старте.
-	DBConnectTimeout time.Duration
-	// DBMaxConnections — максимальный размер пула соединений.
-	DBMaxConnections int
-	// Env — режим работы: EnvDev или EnvProd. В dev при старте запускается сидер.
-	Env string
-
-	// HashConcurrency — сколько проверок argon2id может выполняться одновременно.
-	HashConcurrency int
-	// HashWaitTimeout — сколько ждать свободный слот проверки пароля.
-	HashWaitTimeout time.Duration
-	// StreamBaseURL — адрес стрим-сервера (http или https), к которому добавляется stream_path канала.
-	StreamBaseURL string
 }
 
-// Load читает конфигурацию через getenv (обычно os.Getenv).
-// Пустая переменная (в том числе из одних пробелов) означает «использовать значение
-// по умолчанию»; пробелы по краям значения отбрасываются.
-// Все найденные ошибки возвращаются одним значением.
-func Load(getenv func(string) string) (Config, error) {
-	l := loader{getenv: getenv}
+// Database — подключение к Postgres.
+type Database struct {
+	// URL — строка подключения.
+	URL string
+	// ConnectTimeout ограничивает ожидание доступности БД при старте.
+	ConnectTimeout time.Duration
+	// MaxConnections — максимальный размер пула соединений.
+	MaxConnections int
+}
 
-	cfg := Config{
-		HTTPAddr:          l.str("HTTP_ADDR", ":8080"),
-		LogLevel:          l.level("LOG_LEVEL", slog.LevelInfo),
+// common читает общие настройки. Режим читается первым: от него зависит правило для ключа.
+func (l *loader) common() Common {
+	c := Common{
+		Env:      l.oneOf("APP_ENV", EnvDev, EnvDev, EnvProd),
+		LogLevel: l.level("LOG_LEVEL", slog.LevelInfo),
+	}
+	c.StreamSigningKey = l.signingKey("STREAM_SIGNING_KEY", c.Env)
+	return c
+}
+
+func (l *loader) httpTimeouts() HTTPTimeouts {
+	return HTTPTimeouts{
 		ReadHeaderTimeout: l.duration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
 		ReadTimeout:       l.duration("HTTP_READ_TIMEOUT", 10*time.Second),
 		WriteTimeout:      l.duration("HTTP_WRITE_TIMEOUT", 15*time.Second),
 		IdleTimeout:       l.duration("HTTP_IDLE_TIMEOUT", 60*time.Second),
 		ShutdownTimeout:   l.duration("SHUTDOWN_TIMEOUT", 10*time.Second),
-
-		DatabaseURL:      l.str("DATABASE_URL", "postgres://iptv:iptv@localhost:5442/iptv?sslmode=disable"),
-		DBConnectTimeout: l.duration("DB_CONNECT_TIMEOUT", 30*time.Second),
-		DBMaxConnections: l.positiveInt("DB_MAX_CONNECTIONS", 10),
-		Env:              l.oneOf("APP_ENV", EnvProd, EnvDev, EnvProd),
-
-		HashConcurrency: l.positiveInt("HASH_CONCURRENCY", runtime.GOMAXPROCS(0)),
-		HashWaitTimeout: l.duration("HASH_WAIT_TIMEOUT", 2*time.Second),
-		StreamBaseURL:   l.httpURL("STREAM_BASE_URL", "http://localhost:8081"),
 	}
+}
 
+// database читает подключение к БД. Размер пула по умолчанию у сервисов разный.
+func (l *loader) database(defaultMaxConns int) Database {
+	return Database{
+		URL:            l.str("DATABASE_URL", defaultDatabaseURL),
+		ConnectTimeout: l.duration("DB_CONNECT_TIMEOUT", 30*time.Second),
+		MaxConnections: l.positiveInt("DB_MAX_CONNECTIONS", defaultMaxConns),
+	}
+}
+
+// load запускает разбор через fn и объединяет все найденные ошибки в одну.
+func load[T any](getenv func(string) string, fn func(l *loader) T) (T, error) {
+	l := loader{getenv: getenv}
+	cfg := fn(&l)
 	if err := errors.Join(l.errs...); err != nil {
-		return Config{}, err
+		var zero T
+		return zero, err
 	}
 	return cfg, nil
 }
@@ -153,6 +179,21 @@ func (l *loader) level(key string, def slog.Level) slog.Level {
 		return def
 	}
 	return lvl
+}
+
+// signingKey читает секрет подписи. В dev пустое значение заменяется небезопасным
+// ключом по умолчанию, в prod ключ обязателен и должен быть достаточно длинным.
+func (l *loader) signingKey(key, env string) string {
+	v := l.get(key)
+	switch {
+	case v == "" && env == EnvDev:
+		return DevSigningKey
+	case v == "":
+		l.errs = append(l.errs, fmt.Errorf("%s: required when APP_ENV=%s", key, env))
+	case env != EnvDev && len(v) < MinSigningKeyLen:
+		l.errs = append(l.errs, fmt.Errorf("%s: must be at least %d bytes in %s", key, MinSigningKeyLen, env))
+	}
+	return v
 }
 
 // httpURL читает абсолютный адрес со схемой http или https. Завершающий слэш отбрасывается.

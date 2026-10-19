@@ -28,11 +28,14 @@ func (f fakeAuth) Authenticate(_ context.Context, login, password string) (domai
 
 type fakeChannels struct{ err error }
 
-func (f fakeChannels) List(context.Context, domain.User) ([]domain.Channel, error) {
+func (f fakeChannels) List(context.Context, domain.User) ([]domain.ChannelAccess, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	return []domain.Channel{{ID: 1, Number: 1, Name: "Первый", StreamPath: "/secret/path"}}, nil
+	return []domain.ChannelAccess{
+		{Channel: domain.Channel{ID: 1, Number: 1, Name: "Первый", StreamPath: "/secret/path"}, Available: true},
+		{Channel: domain.Channel{ID: 2, Number: 2, Name: "Матч ТВ", StreamPath: "/secret/path2"}},
+	}, nil
 }
 
 type fakePlayback struct{ err error }
@@ -88,6 +91,7 @@ func TestAPI(t *testing.T) {
 		{name: "playback negative id", target: "/api/v1/channels/-5/playback", user: "alice", pass: "secret", wantStatus: 400, wantCode: "bad_request"},
 		{name: "playback overflow id", target: "/api/v1/channels/99999999999999999999/playback", user: "alice", pass: "secret", wantStatus: 400, wantCode: "bad_request"},
 		{name: "playback not found", target: "/api/v1/channels/2/playback", user: "alice", pass: "secret", wantStatus: 404, wantCode: "not_found"},
+		{name: "playback forbidden", pb: fakePlayback{err: domain.ErrForbidden}, target: "/api/v1/channels/1/playback", user: "alice", pass: "secret", wantStatus: 403, wantCode: "forbidden"},
 		{name: "playback internal error", pb: fakePlayback{err: boom}, target: "/api/v1/channels/1/playback", user: "alice", pass: "secret", wantStatus: 500, wantCode: "internal_error"},
 	}
 	for _, tt := range tests {
@@ -131,7 +135,7 @@ func TestAPI(t *testing.T) {
 
 func TestChannelsJSON(t *testing.T) {
 	rec := get(newAPI(slog.Default(), fakeAuth{}, fakeChannels{}, fakePlayback{}), "/api/v1/channels", "alice", "secret")
-	want := `{"channels":[{"id":1,"number":1,"name":"Первый"}]}`
+	want := `{"channels":[{"id":1,"number":1,"name":"Первый","available":true},{"id":2,"number":2,"name":"Матч ТВ","available":false}]}`
 	if got := strings.TrimSpace(rec.Body.String()); got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}

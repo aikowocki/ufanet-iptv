@@ -15,9 +15,9 @@ import (
 // authRealm показывается клиенту в заголовке WWW-Authenticate.
 const authRealm = "iptv"
 
-// ChannelLister возвращает каналы, доступные пользователю.
+// ChannelLister возвращает каналы каталога с признаком доступности пользователю.
 type ChannelLister interface {
-	List(ctx context.Context, user domain.User) ([]domain.Channel, error)
+	List(ctx context.Context, user domain.User) ([]domain.ChannelAccess, error)
 }
 
 // LinkBuilder возвращает ссылку на поток канала.
@@ -36,6 +36,8 @@ type channelDTO struct {
 	ID     int64  `json:"id"`
 	Number int    `json:"number"`
 	Name   string `json:"name"`
+	// Available равен false, если нужна подписка: приставка может предложить её оформить.
+	Available bool `json:"available"`
 }
 
 type channelsResponse struct {
@@ -67,7 +69,7 @@ func (a api) handleChannels(w http.ResponseWriter, r *http.Request) {
 	}
 	out := channelsResponse{Channels: make([]channelDTO, 0, len(list))}
 	for _, c := range list {
-		out.Channels = append(out.Channels, channelDTO{ID: c.ID, Number: c.Number, Name: c.Name})
+		out.Channels = append(out.Channels, channelDTO{ID: c.ID, Number: c.Number, Name: c.Name, Available: c.Available})
 	}
 	response.JSON(w, http.StatusOK, out)
 }
@@ -85,6 +87,8 @@ func (a api) handlePlayback(w http.ResponseWriter, r *http.Request) {
 		response.JSON(w, http.StatusOK, playbackResponse{ChannelID: id, URL: url})
 	case errors.Is(err, domain.ErrNotFound):
 		response.Error(w, http.StatusNotFound, response.CodeNotFound, "channel not found")
+	case errors.Is(err, domain.ErrForbidden):
+		response.Error(w, http.StatusForbidden, response.CodeForbidden, "no active subscription for this channel, please subscribe")
 	default:
 		a.internalError(w, r, err)
 	}

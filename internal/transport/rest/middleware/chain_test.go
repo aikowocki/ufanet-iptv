@@ -19,7 +19,7 @@ func TestChainOrder(t *testing.T) {
 	}
 	h := Chain(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { order = append(order, "handler") }),
 		mk("a"), mk("b"))
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 
 	if got := strings.Join(order, ","); got != "a,b,handler" {
 		t.Errorf("order = %s, want a,b,handler", got)

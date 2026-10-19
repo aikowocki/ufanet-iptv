@@ -23,12 +23,21 @@ type Channel struct {
 	IsActive   bool
 }
 
+// ChannelAccess — канал каталога и признак того, доступен ли он пользователю по подписке.
+type ChannelAccess struct {
+	Channel
+	// Available равен false, если нужной подписки нет или она истекла.
+	Available bool
+}
+
 var (
 	// ErrInvalidCredentials — неизвестный логин, неверный пароль или выключенный
 	// пользователь. Причины намеренно не различаются, чтобы не раскрывать, какие логины существуют.
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	// ErrNotFound — запрошенной записи нет (или она недоступна для показа).
 	ErrNotFound = errors.New("not found")
+	// ErrForbidden — канал существует, но у пользователя нет действующей подписки на него.
+	ErrForbidden = errors.New("forbidden")
 	// ErrBusy — сервис временно перегружен проверкой паролей; запрос можно повторить позже.
 	ErrBusy = errors.New("service is busy")
 )

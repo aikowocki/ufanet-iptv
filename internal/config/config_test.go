@@ -7,8 +7,20 @@ import (
 	"time"
 )
 
+const testKey = "0123456789abcdef0123456789abcdef"
+
+// env возвращает getenv поверх m. STREAM_SIGNING_KEY подставляется, если не задан
+// (в prod он обязателен), кроме случая явного значения в m.
 func env(m map[string]string) func(string) string {
-	return func(k string) string { return m[k] }
+	return func(k string) string {
+		if v, ok := m[k]; ok {
+			return v
+		}
+		if k == "STREAM_SIGNING_KEY" {
+			return testKey
+		}
+		return ""
+	}
 }
 
 func TestLoadDefaults(t *testing.T) {
@@ -88,12 +100,12 @@ func TestLoadErrorMentionsVariableAndCause(t *testing.T) {
 
 func TestLoadAppEnv(t *testing.T) {
 	cfg, err := Load(env(nil))
-	if err != nil || cfg.Env != EnvProd {
-		t.Fatalf("default Env = %q, err = %v; want prod", cfg.Env, err)
-	}
-	cfg, err = Load(env(map[string]string{"APP_ENV": "dev"}))
 	if err != nil || cfg.Env != EnvDev {
-		t.Fatalf("Env = %q, err = %v; want dev", cfg.Env, err)
+		t.Fatalf("default Env = %q, err = %v; want dev", cfg.Env, err)
+	}
+	cfg, err = Load(env(map[string]string{"APP_ENV": "prod"}))
+	if err != nil || cfg.Env != EnvProd {
+		t.Fatalf("Env = %q, err = %v; want prod", cfg.Env, err)
 	}
 	if _, err = Load(env(map[string]string{"APP_ENV": "staging"})); err == nil {
 		t.Error("expected error for unknown APP_ENV")
@@ -113,5 +125,92 @@ func TestStreamBaseURL(t *testing.T) {
 		if _, err := Load(env(map[string]string{"STREAM_BASE_URL": bad})); err == nil {
 			t.Errorf("STREAM_BASE_URL=%q: expected error", bad)
 		}
+	}
+}
+
+func TestStreamSigning(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil || cfg.StreamSigningKey != testKey || cfg.StreamTokenTTL != 5*time.Minute {
+		t.Fatalf("defaults: key=%q ttl=%v err=%v", cfg.StreamSigningKey, cfg.StreamTokenTTL, err)
+	}
+	cfg, err = Load(env(map[string]string{"STREAM_TOKEN_TTL": "90s"}))
+	if err != nil || cfg.StreamTokenTTL != 90*time.Second {
+		t.Fatalf("ttl override = %v, %v", cfg.StreamTokenTTL, err)
+	}
+	if _, err = Load(env(map[string]string{"STREAM_TOKEN_TTL": "0s"})); err == nil {
+		t.Error("expected error for non-positive STREAM_TOKEN_TTL")
+	}
+
+	// prod: ключ обязателен и достаточно длинный.
+	for name, key := range map[string]string{"missing": "", "spaces": "   ", "short": "too-short"} {
+		if _, err := Load(env(map[string]string{"APP_ENV": "prod", "STREAM_SIGNING_KEY": key})); err == nil {
+			t.Errorf("prod, %s key: expected error", name)
+		}
+	}
+
+	// dev (режим по умолчанию): пустой ключ заменяется значением по умолчанию, заданный сохраняется.
+	cfg, err = Load(env(map[string]string{"APP_ENV": "dev", "STREAM_SIGNING_KEY": ""}))
+	if err != nil || cfg.StreamSigningKey != DevSigningKey {
+		t.Fatalf("dev default key = %q, %v", cfg.StreamSigningKey, err)
+	}
+	cfg, err = Load(env(map[string]string{"APP_ENV": "dev", "STREAM_SIGNING_KEY": "short"}))
+	if err != nil || cfg.StreamSigningKey != "short" {
+		t.Fatalf("dev explicit key = %q, %v", cfg.StreamSigningKey, err)
+	}
+}
+
+func TestLoadStream(t *testing.T) {
+	cfg, err := LoadStream(env(nil))
+	if err != nil || cfg.HTTPAddr != ":8081" || cfg.Env != EnvDev || cfg.StreamSigningKey != testKey {
+		t.Fatalf("defaults: %+v, %v", cfg, err)
+	}
+	if cfg.FFmpegBin != "ffmpeg" || cfg.SourceFile != "docs/sample-10s-vp9.mp4" || cfg.FontFamily != "DejaVu Sans" ||
+		cfg.TranscodeIdle != 30*time.Second || cfg.TranscodeStartTimeout != 15*time.Second {
+		t.Fatalf("transcoder defaults: %+v", cfg)
+	}
+	if _, err = LoadStream(env(map[string]string{"STREAM_IDLE_TIMEOUT": "-1s"})); err == nil {
+		t.Error("negative STREAM_IDLE_TIMEOUT: expected error")
+	}
+	cfg, err = LoadStream(env(map[string]string{"STREAM_HTTP_ADDR": ":9000", "STREAM_SIGNING_KEY": ""}))
+	if err != nil || cfg.HTTPAddr != ":9000" || cfg.StreamSigningKey != DevSigningKey {
+		t.Fatalf("dev without key: %+v, %v", cfg, err)
+	}
+	if _, err = LoadStream(env(map[string]string{"APP_ENV": "prod", "STREAM_SIGNING_KEY": ""})); err == nil {
+		t.Error("prod without key: expected error")
+	}
+	if _, err = LoadStream(env(map[string]string{"HTTP_READ_TIMEOUT": "soon"})); err == nil {
+		t.Error("bad timeout: expected error")
+	}
+}
+
+// Общие настройки у API и стрим-сервера читаются одинаково, а размер пула БД по умолчанию разный.
+func TestSharedSettings(t *testing.T) {
+	vars := map[string]string{
+		"APP_ENV": "prod", "STREAM_SIGNING_KEY": testKey, "DATABASE_URL": "postgres://db.example/x",
+		"LOG_LEVEL": "warn", "HTTP_READ_TIMEOUT": "3s", "DB_CONNECT_TIMEOUT": "7s",
+	}
+	srv, err := Load(env(vars))
+	if err != nil {
+		t.Fatal(err)
+	}
+	str, err := LoadStream(env(vars))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if srv.Common != str.Common || srv.HTTPTimeouts != str.HTTPTimeouts {
+		t.Errorf("shared settings differ:\napi    %+v %+v\nstream %+v %+v", srv.Common, srv.HTTPTimeouts, str.Common, str.HTTPTimeouts)
+	}
+	if srv.DB.URL != "postgres://db.example/x" || str.DB.URL != srv.DB.URL || srv.DB.ConnectTimeout != 7*time.Second {
+		t.Errorf("db: api %+v, stream %+v", srv.DB, str.DB)
+	}
+	if srv.DB.MaxConnections != 10 || str.DB.MaxConnections != 4 {
+		t.Errorf("pool defaults: api %d, stream %d; want 10 and 4", srv.DB.MaxConnections, str.DB.MaxConnections)
+	}
+	if srv.UsesDevSigningKey() {
+		t.Error("prod config reports dev key")
+	}
+	dev, _ := Load(env(map[string]string{"STREAM_SIGNING_KEY": ""}))
+	if !dev.UsesDevSigningKey() {
+		t.Error("dev config without key should report dev key")
 	}
 }

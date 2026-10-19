@@ -1,0 +1,178 @@
+{
+  "info": {
+    "name": "IPTV mini-backend",
+    "description": "Коллекция для проверки API. Переменные: base_url, login, password (dev-учётки: alice/alice123, bob/bob12345, admin/admin123). У alice доступны все каналы, у bob только «Базовый» в первые 10 минут после первого seed, поэтому каналы без подписки видны с available=false, а playback на них даёт 403.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      { "key": "username", "value": "{{login}}", "type": "string" },
+      { "key": "password", "value": "{{password}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8090" },
+    { "key": "login", "value": "alice" },
+    { "key": "password", "value": "alice123" },
+    { "key": "channel_id", "value": "1" },
+    { "key": "locked_channel_id", "value": "3" }
+  ],
+  "item": [
+    {
+      "name": "Служебные",
+      "item": [
+        {
+          "name": "healthz",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{base_url}}/healthz"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('status ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+          ] } }]
+        },
+        {
+          "name": "readyz",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{base_url}}/readyz"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('status ready', () => pm.expect(pm.response.json().status).to.eql('ready'));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "Каналы",
+      "item": [
+        {
+          "name": "Список каналов (с признаком доступности)",
+          "request": { "method": "GET", "url": "{{base_url}}/api/v1/channels" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.test('есть каналы', () => pm.expect(body.channels).to.be.an('array').that.is.not.empty);",
+            "pm.test('поля канала', () => {",
+            "  const c = body.channels[0];",
+            "  pm.expect(c).to.have.all.keys('id', 'number', 'name', 'available');",
+            "  pm.expect(c.available).to.be.a('boolean');",
+            "});",
+            "const open = body.channels.find(c => c.available);",
+            "if (open) pm.collectionVariables.set('channel_id', open.id);"
+          ] } }]
+        },
+        {
+          "name": "Ссылка на поток",
+          "request": { "method": "GET", "url": "{{base_url}}/api/v1/channels/{{channel_id}}/playback" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.test('channel_id совпадает', () => pm.expect(String(body.channel_id)).to.eql(pm.collectionVariables.get('channel_id')));",
+            "pm.test('url — HLS плейлист', () => pm.expect(body.url).to.match(/^https?:\\/\\/.+\\.m3u8/));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "Ошибки",
+      "item": [
+        {
+          "name": "401: без авторизации",
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/api/v1/channels" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));",
+            "pm.test('WWW-Authenticate', () => pm.expect(pm.response.headers.get('WWW-Authenticate')).to.include('Basic'));",
+            "pm.test('JSON-ошибка', () => pm.expect(pm.response.json().error).to.have.property('code'));"
+          ] } }]
+        },
+        {
+          "name": "401: неверный пароль",
+          "request": {
+            "auth": { "type": "basic", "basic": [
+              { "key": "username", "value": "alice", "type": "string" },
+              { "key": "password", "value": "wrong", "type": "string" }
+            ] },
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/channels"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));",
+            "pm.test('WWW-Authenticate', () => pm.expect(pm.response.headers.has('WWW-Authenticate')).to.be.true);"
+          ] } }]
+        },
+        {
+          "name": "400: некорректный id",
+          "request": { "method": "GET", "url": "{{base_url}}/api/v1/channels/abc/playback" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('JSON-ошибка', () => pm.expect(pm.response.json().error).to.have.property('message'));"
+          ] } }]
+        },
+        {
+          "name": "Список каналов: bob (есть недоступные)",
+          "request": {
+            "auth": { "type": "basic", "basic": [
+              { "key": "username", "value": "bob", "type": "string" },
+              { "key": "password", "value": "bob12345", "type": "string" }
+            ] },
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/channels"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const locked = pm.response.json().channels.filter(c => !c.available);",
+            "pm.test('есть каналы без подписки', () => pm.expect(locked).to.not.be.empty);",
+            "if (locked.length) pm.collectionVariables.set('locked_channel_id', locked[0].id);"
+          ] } }]
+        },
+        {
+          "name": "403: канал без подписки (bob)",
+          "request": {
+            "auth": { "type": "basic", "basic": [
+              { "key": "username", "value": "bob", "type": "string" },
+              { "key": "password", "value": "bob12345", "type": "string" }
+            ] },
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/channels/{{locked_channel_id}}/playback"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403', () => pm.response.to.have.status(403));",
+            "pm.test('forbidden', () => pm.expect(pm.response.json().error.code).to.eql('forbidden'));",
+            "pm.test('нет ссылки в ответе', () => pm.expect(pm.response.json()).to.not.have.property('url'));"
+          ] } }]
+        },
+        {
+          "name": "404: несуществующий канал",
+          "request": { "method": "GET", "url": "{{base_url}}/api/v1/channels/999999/playback" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', () => pm.response.to.have.status(404));",
+            "pm.test('JSON-ошибка', () => pm.expect(pm.response.json().error.code).to.eql('not_found'));"
+          ] } }]
+        },
+        {
+          "name": "404: неизвестный путь",
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{base_url}}/nope" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', () => pm.response.to.have.status(404));",
+            "pm.test('JSON-ошибка', () => pm.expect(pm.response.json().error.code).to.eql('not_found'));"
+          ] } }]
+        },
+        {
+          "name": "405: неверный метод",
+          "request": { "method": "POST", "url": "{{base_url}}/api/v1/channels" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('405', () => pm.response.to.have.status(405));",
+            "pm.test('Allow', () => pm.expect(pm.response.headers.has('Allow')).to.be.true);",
+            "pm.test('JSON-ошибка', () => pm.expect(pm.response.json().error.code).to.eql('method_not_allowed'));"
+          ] } }]
+        }
+      ]
+    }
+  ]
+}
