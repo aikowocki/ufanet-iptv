@@ -2,7 +2,10 @@
 // Пакет не зависит ни от БД, ни от HTTP.
 package domain
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // User — абонент или администратор.
 type User struct {
@@ -28,6 +31,27 @@ type ChannelAccess struct {
 	Channel
 	// Available равен false, если нужной подписки нет или она истекла.
 	Available bool
+}
+
+// SubscriptionStatus — состояние подписки пользователя на пакет на момент запроса.
+type SubscriptionStatus string
+
+const (
+	// SubscriptionActive — подписка действует: включена, пакет включён, срок не истёк.
+	SubscriptionActive SubscriptionStatus = "active"
+	// SubscriptionExpired — подписка включена, но её срок истёк.
+	SubscriptionExpired SubscriptionStatus = "expired"
+	// SubscriptionDisabled — подписка или пакет выключены вручную.
+	SubscriptionDisabled SubscriptionStatus = "disabled"
+)
+
+// Subscription — подписка пользователя на пакет каналов.
+type Subscription struct {
+	PackageID   int64
+	PackageName string
+	Status      SubscriptionStatus
+	// ExpiresAt равен nil для бессрочной подписки.
+	ExpiresAt *time.Time
 }
 
 var (

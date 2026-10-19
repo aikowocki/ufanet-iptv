@@ -36,9 +36,6 @@ services:
       APP_ENV: "${APP_ENV:-dev}"
       # Названия каналов читаются из той же БД, что и в API.
       DATABASE_URL: "postgres://${POSTGRES_USER:-iptv}:${POSTGRES_PASSWORD:-iptv}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-iptv}?sslmode=disable"
-      STREAM_SOURCE_FILE: /media/sample-10s-vp9.mp4
-    volumes:
-      - ./docs/sample-10s-vp9.mp4:/media/sample-10s-vp9.mp4:ro
     ports:
       - "${HOST_STREAM_PORT:-8081}:${STREAM_PORT:-8081}"
     healthcheck:
@@ -75,5 +72,15 @@ services:
       timeout: 3s
       retries: 5
     stop_grace_period: 15s
+  # Фронтенд (Vue + Vuetify): статика и прокси /api на сервис app.
+  web:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile.web
+      target: web
+    depends_on:
+      - app
+    ports:
+      - "${HOST_WEB_PORT:-3000}:80"
 volumes:
   pgdata:

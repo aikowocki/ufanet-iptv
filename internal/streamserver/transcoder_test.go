@@ -47,10 +47,6 @@ func newTestTranscoder(t *testing.T, font string, idle time.Duration) (*Transcod
 	if err := os.WriteFile(bin, []byte(fakeFFmpegScript), 0o700); err != nil { //nolint:gosec // тестовый скрипт должен быть исполняемым
 		t.Fatal(err)
 	}
-	input := filepath.Join(dir, "in.mp4")
-	if err := os.WriteFile(input, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	starts := filepath.Join(dir, "starts.log")
 	t.Setenv("FAKE_STARTS", starts)
 
@@ -58,7 +54,7 @@ func newTestTranscoder(t *testing.T, font string, idle time.Duration) (*Transcod
 		"/live/channel1/index.m3u8": {ID: 1, Number: 1, Name: "Первый", IsActive: true},
 	}}
 	tc, err := NewTranscoder(slog.New(slog.DiscardHandler), ch, Options{
-		FFmpeg: bin, Input: input, FontFamily: font, Idle: idle, StartTimeout: 5 * time.Second,
+		FFmpeg: bin, FontFamily: font, Idle: idle, StartTimeout: 5 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -204,13 +200,9 @@ func TestTranscoderStopsIdleAndRestarts(t *testing.T) {
 
 func TestTranscoderStartFailure(t *testing.T) {
 	dir := t.TempDir()
-	input := filepath.Join(dir, "in.mp4")
-	if err := os.WriteFile(input, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	ch := &fakeChannels{byKey: map[string]domain.Channel{"/p/index.m3u8": {Name: "A"}}}
 	tc, err := NewTranscoder(slog.New(slog.DiscardHandler), ch, Options{
-		FFmpeg: filepath.Join(dir, "no-such-ffmpeg"), Input: input, Idle: time.Minute, StartTimeout: time.Second,
+		FFmpeg: filepath.Join(dir, "no-such-ffmpeg"), Idle: time.Minute, StartTimeout: time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -221,36 +213,40 @@ func TestTranscoderStartFailure(t *testing.T) {
 	}
 }
 
-func TestNewTranscoderMissingInput(t *testing.T) {
-	if _, err := NewTranscoder(slog.New(slog.DiscardHandler), &fakeChannels{}, Options{Input: "/no/such/file.mp4"}); err == nil {
-		t.Fatal("expected error for missing input")
-	}
-}
-
 func TestFFmpegArgs(t *testing.T) {
-	with := strings.Join(ffmpegArgs(Options{Input: "/in.mp4", FontFamily: "F"}), " ")
-	for _, want := range []string{"-stream_loop -1", "-re", "-i /in.mp4", "-vf ass=filename=label.ass", "-f hls", "index.m3u8"} {
+	with := strings.Join(ffmpegArgs(Options{FontFamily: "F"}, 1), " ")
+	for _, want := range []string{"-re", "-f lavfi", "sine=frequency=", "-vf ass=filename=label.ass", "-f hls", "index.m3u8"} {
 		if !strings.Contains(with, want) {
 			t.Errorf("args missing %q: %s", want, with)
 		}
 	}
-	dir := strings.Join(ffmpegArgs(Options{Input: "/in.mp4", FontFamily: "F", FontsDir: "/fonts"}), " ")
+	if strings.Contains(with, "-stream_loop") || strings.Contains(with, "%d") || strings.Contains(with, "-i /") {
+		t.Errorf("unexpected args: %s", with)
+	}
+	dir := strings.Join(ffmpegArgs(Options{FontFamily: "F", FontsDir: "/fonts"}, 1), " ")
 	if !strings.Contains(dir, "ass=filename=label.ass:fontsdir='/fonts'") {
 		t.Errorf("fontsdir missing: %s", dir)
 	}
-	without := strings.Join(ffmpegArgs(Options{Input: "/in.mp4"}), " ")
+	without := strings.Join(ffmpegArgs(Options{}, 1), " ")
 	if strings.Contains(without, "-vf") {
 		t.Errorf("video filter present without font: %s", without)
 	}
 }
 
-func TestLabelASSEscapesName(t *testing.T) {
-	got := labelASS("A,B", "Мат{\\an1}ч\\N\nТВ")
-	if !strings.Contains(got, "Style: Label,A B,") {
-		t.Errorf("font field not sanitized: %q", got)
+// Каналы отличаются друг от друга, а один и тот же канал после перезапуска ffmpeg выглядит так же.
+func TestGeneratedInput(t *testing.T) {
+	seen := map[string]bool{}
+	for id := int64(1); id <= int64(len(generatedVideo)); id++ {
+		in := generatedInput(id)
+		seen[in[4]] = true
+		if strings.Contains(strings.Join(in, " "), "%d") {
+			t.Errorf("channel %d: unformatted placeholder: %v", id, in)
+		}
 	}
-	// Теги оформления, обратные слэши и переводы строк из названия обезврежены.
-	if !strings.HasSuffix(got, ",Label,,0,0,0,,Мат(/an1)ч/N ТВ\n") {
-		t.Errorf("text not sanitized: %q", got)
+	if len(seen) != len(generatedVideo) {
+		t.Errorf("distinct video sources = %d, want %d", len(seen), len(generatedVideo))
+	}
+	if a, b := generatedInput(7), generatedInput(7); strings.Join(a, " ") != strings.Join(b, " ") {
+		t.Error("generated source is not deterministic")
 	}
 }

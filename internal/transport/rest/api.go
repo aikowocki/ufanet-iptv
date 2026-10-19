@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/aikowocki/ufanet-iptv/internal/domain"
 	"github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware"
@@ -25,11 +26,18 @@ type LinkBuilder interface {
 	Link(ctx context.Context, user domain.User, channelID int64) (string, error)
 }
 
+// SubscriptionLister возвращает подписки пользователя.
+type SubscriptionLister interface {
+	List(ctx context.Context, user domain.User) ([]domain.Subscription, error)
+}
+
 // Deps — зависимости API абонента. Если Auth равен nil, маршруты /api/v1 не регистрируются.
 type Deps struct {
 	Auth     middleware.Authenticator
 	Channels ChannelLister
 	Playback LinkBuilder
+	// Subscriptions необязателен: без него GET /api/v1/subscriptions не регистрируется.
+	Subscriptions SubscriptionLister
 }
 
 type channelDTO struct {
@@ -42,6 +50,19 @@ type channelDTO struct {
 
 type channelsResponse struct {
 	Channels []channelDTO `json:"channels"`
+}
+
+type subscriptionDTO struct {
+	PackageID int64  `json:"package_id"`
+	Package   string `json:"package"`
+	// Status: active, expired или disabled.
+	Status string `json:"status"`
+	// ExpiresAt равен null для бессрочной подписки.
+	ExpiresAt *time.Time `json:"expires_at"`
+}
+
+type subscriptionsResponse struct {
+	Subscriptions []subscriptionDTO `json:"subscriptions"`
 }
 
 type playbackResponse struct {
@@ -58,6 +79,9 @@ func (a api) register(mux *http.ServeMux) {
 	auth := middleware.BasicAuth(a.log, a.deps.Auth, authRealm)
 	mux.Handle("GET /api/v1/channels", auth(http.HandlerFunc(a.handleChannels)))
 	mux.Handle("GET /api/v1/channels/{id}/playback", auth(http.HandlerFunc(a.handlePlayback)))
+	if a.deps.Subscriptions != nil {
+		mux.Handle("GET /api/v1/subscriptions", auth(http.HandlerFunc(a.handleSubscriptions)))
+	}
 }
 
 func (a api) handleChannels(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +94,22 @@ func (a api) handleChannels(w http.ResponseWriter, r *http.Request) {
 	out := channelsResponse{Channels: make([]channelDTO, 0, len(list))}
 	for _, c := range list {
 		out.Channels = append(out.Channels, channelDTO{ID: c.ID, Number: c.Number, Name: c.Name, Available: c.Available})
+	}
+	response.JSON(w, http.StatusOK, out)
+}
+
+func (a api) handleSubscriptions(w http.ResponseWriter, r *http.Request) {
+	user, _ := middleware.UserFrom(r.Context())
+	list, err := a.deps.Subscriptions.List(r.Context(), user)
+	if err != nil {
+		a.internalError(w, r, err)
+		return
+	}
+	out := subscriptionsResponse{Subscriptions: make([]subscriptionDTO, 0, len(list))}
+	for _, s := range list {
+		out.Subscriptions = append(out.Subscriptions, subscriptionDTO{
+			PackageID: s.PackageID, Package: s.PackageName, Status: string(s.Status), ExpiresAt: s.ExpiresAt,
+		})
 	}
 	response.JSON(w, http.StatusOK, out)
 }

@@ -62,7 +62,6 @@ func run() error {
 	}
 	transcoder, err := streamserver.NewTranscoder(log, channels, streamserver.Options{
 		FFmpeg:       cfg.FFmpegBin,
-		Input:        cfg.SourceFile,
 		FontFamily:   fontFamily,
 		FontsDir:     cfg.FontsDir,
 		Idle:         cfg.TranscodeIdle,
@@ -86,7 +85,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	log.Info("stream server listening", "addr", ln.Addr().String(), "source", cfg.SourceFile)
+	log.Info("stream server listening", "addr", ln.Addr().String())
 
 	if err := httpserve.Serve(ctx, srv, ln, cfg.ShutdownTimeout); err != nil {
 		return err

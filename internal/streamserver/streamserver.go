@@ -92,7 +92,17 @@ func NewHandler(log *slog.Logger, signer Signer, src Source) http.Handler {
 		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 		_, _ = w.Write(body) //nolint:gosec // это HLS-плейлист, а не HTML
 	})
-	return mux
+	return allowAnyOrigin(mux)
+}
+
+// allowAnyOrigin разрешает веб-плееру (hls.js) со страницы на другом origin читать плейлист
+// и сегменты. Доступ даёт подпись в ссылке, а не cookie или заголовки, поэтому звёздочка
+// не открывает ничего лишнего: без валидной подписи ответ всё равно 403.
+func allowAnyOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // signSegments дописывает к каждому URI сегмента подпись, действительную до claims.Expires.
