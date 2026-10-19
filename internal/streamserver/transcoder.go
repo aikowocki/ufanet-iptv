@@ -1,6 +1,7 @@
 package streamserver
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -71,13 +72,26 @@ type Transcoder struct {
 	mu       sync.Mutex
 	closed   bool
 	sessions map[string]*session // ключ: путь плейлиста
+	// playlistTTL — сколько прочитанный плейлист отдаётся без повторного чтения файла.
+	playlistTTL time.Duration
 }
+
+// defaultPlaylistTTL заметно меньше сегмента (2 с): плеер увидит новый сегмент почти сразу.
+const defaultPlaylistTTL = 250 * time.Millisecond
 
 type session struct {
 	dir     string
 	cancel  context.CancelFunc
 	done    chan struct{} // закрывается, когда ffmpeg завершился
 	lastUse atomic.Int64  // unix nano последнего запроса
+	// playlist — последний прочитанный index.m3u8. Зрители опрашивают плейлист каждые ~2 с,
+	// а ffmpeg обновляет его раз в сегмент, поэтому читать файл на каждый запрос незачем.
+	playlist atomic.Pointer[playlistSnapshot]
+}
+
+type playlistSnapshot struct {
+	data []byte
+	read time.Time
 }
 
 func (s *session) touch() { s.lastUse.Store(time.Now().UnixNano()) }
@@ -104,7 +118,7 @@ func NewTranscoder(log *slog.Logger, channels ChannelFinder, opt Options) (*Tran
 	ctx, cancel := context.WithCancel(context.Background())
 	t := &Transcoder{
 		log: log, channels: channels, opt: opt, root: root,
-		ctx: ctx, cancel: cancel, sessions: map[string]*session{},
+		ctx: ctx, cancel: cancel, sessions: map[string]*session{}, playlistTTL: defaultPlaylistTTL,
 	}
 	t.wg.Add(1)
 	go t.reap()
@@ -137,7 +151,21 @@ func (t *Transcoder) openPlaylist(ctx context.Context, urlPath string) (io.ReadC
 	if err != nil {
 		return nil, err
 	}
-	return t.waitFile(ctx, s, "index.m3u8")
+	if snap := s.playlist.Load(); snap != nil && time.Since(snap.read) < t.playlistTTL {
+		s.touch()
+		return io.NopCloser(bytes.NewReader(snap.data)), nil
+	}
+	f, err := t.waitFile(ctx, s, "index.m3u8")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxPlaylistSize))
+	if err != nil {
+		return nil, fmt.Errorf("read playlist: %w", err)
+	}
+	s.playlist.Store(&playlistSnapshot{data: data, read: time.Now()})
+	return io.NopCloser(bytes.NewReader(data)), nil
 }
 
 func (t *Transcoder) openSegment(urlPath string) (io.ReadCloser, error) {

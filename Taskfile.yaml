@@ -116,6 +116,10 @@ tasks:
     desc: "Нагрузка + pprof: task load:profile -- baseline channels (сценарии: channels, playback, playlist)"
     cmds:
       - bench/profile.sh {{.CLI_ARGS}}
+  load:multiuser:
+    desc: "200 пользователей и холодный старт: task load:multiuser -- baseline (нужен load:up)"
+    cmds:
+      - bench/multiuser.sh {{.CLI_ARGS}}
   install-go-test-coverage:
     desc: Установить go-test-coverage (для проверки порога покрытия)
     cmds:

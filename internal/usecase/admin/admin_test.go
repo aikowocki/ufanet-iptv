@@ -228,3 +228,174 @@ func TestCreateSubscription(t *testing.T) {
 		t.Errorf("duplicate err = %v, want ErrConflict", err)
 	}
 }
+
+type recordingInvalidator struct{ ids []int64 }
+
+func (r *recordingInvalidator) InvalidateUser(id int64) { r.ids = append(r.ids, id) }
+
+// Смена пароля, выключение и смена роли сбрасывают кэш проверок; отказ и пустой патч - нет.
+func TestUpdateUserInvalidatesCache(t *testing.T) {
+	off, pw := false, "new-password-1"
+	inv := &recordingInvalidator{}
+	s := New(&fakeRepo{}, &fakeTx{}, fakeHasher{}, WithUserInvalidator(inv))
+	actor := domain.User{ID: 1, IsAdmin: true}
+
+	for _, in := range []UserUpdate{{IsActive: &off}, {Password: &pw}, {IsAdmin: &off}} {
+		if _, err := s.UpdateUser(context.Background(), actor, 2, in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(inv.ids) != 3 || inv.ids[0] != 2 {
+		t.Fatalf("invalidated %v, want three calls for user 2", inv.ids)
+	}
+
+	inv.ids = nil
+	_, _ = s.UpdateUser(context.Background(), actor, 1, UserUpdate{IsActive: &off}) // self-lockout
+	_, _ = s.UpdateUser(context.Background(), actor, 2, UserUpdate{})               // пустой патч
+	if len(inv.ids) != 0 {
+		t.Fatalf("invalidated %v on rejected updates", inv.ids)
+	}
+}
+
+type recordingCatalog struct{ n int }
+
+// mutationRepo добавляет к fakeRepo методы, которых ему не хватает для проверки каталога.
+type mutationRepo struct{ *fakeRepo }
+
+func (mutationRepo) CreateChannel(_ context.Context, c domain.Channel) (domain.Channel, error) {
+	return c, nil
+}
+func (mutationRepo) UpdateChannel(_ context.Context, id int64, _ ChannelPatch) (domain.Channel, error) {
+	return domain.Channel{ID: id}, nil
+}
+func (mutationRepo) CreatePackage(_ context.Context, p domain.Package) (domain.Package, error) {
+	return p, nil
+}
+func (mutationRepo) UpdatePackage(_ context.Context, id int64, _ PackagePatch) (domain.Package, error) {
+	return domain.Package{ID: id}, nil
+}
+func (mutationRepo) UpdateSubscription(_ context.Context, id int64, _ SubscriptionPatch) (domain.UserSubscription, error) {
+	return domain.UserSubscription{ID: id}, nil
+}
+
+func (r *recordingCatalog) InvalidateCatalog() { r.n++ }
+
+// Любое успешное изменение каналов, пакетов и подписок сбрасывает кэш каталога; ошибка - нет.
+func TestMutationsInvalidateCatalog(t *testing.T) {
+	ctx := context.Background()
+	on := true
+	inv := &recordingCatalog{}
+	repo := mutationRepo{&fakeRepo{
+		users:    map[int64]domain.User{1: {ID: 1}},
+		packages: map[int64]domain.Package{1: {ID: 1}},
+	}}
+	s := New(repo, &fakeTx{}, fakeHasher{}, WithCatalogInvalidator(inv))
+
+	calls := []struct {
+		name string
+		fn   func() error
+	}{
+		{"CreateChannel", func() error {
+			_, err := s.CreateChannel(ctx, ChannelInput{Number: 1, Name: "Первый", StreamPath: "/live/1/index.m3u8"})
+			return err
+		}},
+		{"UpdateChannel", func() error { _, err := s.UpdateChannel(ctx, 1, ChannelPatch{IsActive: &on}); return err }},
+		{"CreatePackage", func() error { _, err := s.CreatePackage(ctx, PackageInput{Name: "Базовый"}); return err }},
+		{"UpdatePackage", func() error { _, err := s.UpdatePackage(ctx, 1, PackagePatch{IsActive: &on}); return err }},
+		{"SetPackageChannels", func() error { _, err := s.SetPackageChannels(ctx, 1, []int64{1}); return err }},
+		{"CreateSubscription", func() error {
+			_, err := s.CreateSubscription(ctx, 1, SubscriptionInput{PackageID: 1})
+			return err
+		}},
+		{"UpdateSubscription", func() error {
+			_, err := s.UpdateSubscription(ctx, 1, SubscriptionPatch{IsActive: &on})
+			return err
+		}},
+	}
+	for i, c := range calls {
+		if err := c.fn(); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if inv.n != i+1 {
+			t.Errorf("%s: invalidations = %d, want %d", c.name, inv.n, i+1)
+		}
+	}
+
+	before := inv.n
+	_, _ = s.UpdateChannel(ctx, 1, ChannelPatch{}) // пустой патч - отказ
+	if inv.n != before {
+		t.Errorf("rejected update invalidated the cache")
+	}
+}
+
+type fakePublisher struct {
+	events []domain.InvalidationEvent
+	err    error
+}
+
+func (f *fakePublisher) Publish(_ context.Context, ev domain.InvalidationEvent) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.events = append(f.events, ev)
+	return nil
+}
+
+// Каждая правка публикует событие своего вида внутри транзакции записи.
+func TestMutationsPublishEvents(t *testing.T) {
+	ctx := context.Background()
+	on := true
+	pub := &fakePublisher{}
+	tx := &fakeTx{}
+	repo := mutationRepo{&fakeRepo{
+		users:    map[int64]domain.User{1: {ID: 1}},
+		packages: map[int64]domain.Package{1: {ID: 1}},
+	}}
+	s := New(repo, tx, fakeHasher{}, WithInvalidator(pub))
+	actor := domain.User{ID: 99, IsAdmin: true}
+
+	steps := []struct {
+		name string
+		fn   func() error
+		want domain.InvalidationEvent
+	}{
+		{"UpdateUser", func() error { _, err := s.UpdateUser(ctx, actor, 5, UserUpdate{IsActive: &on}); return err },
+			domain.InvalidationEvent{Kind: domain.InvalidateUser, ID: 5}},
+		{"UpdateChannel", func() error { _, err := s.UpdateChannel(ctx, 3, ChannelPatch{IsActive: &on}); return err },
+			domain.InvalidationEvent{Kind: domain.InvalidateChannel, ID: 3}},
+		{"UpdatePackage", func() error { _, err := s.UpdatePackage(ctx, 4, PackagePatch{IsActive: &on}); return err },
+			domain.InvalidationEvent{Kind: domain.InvalidatePackage, ID: 4}},
+		{"SetPackageChannels", func() error { _, err := s.SetPackageChannels(ctx, 1, []int64{1}); return err },
+			domain.InvalidationEvent{Kind: domain.InvalidatePackage, ID: 1}},
+		{"UpdateSubscription", func() error { _, err := s.UpdateSubscription(ctx, 8, SubscriptionPatch{IsActive: &on}); return err },
+			domain.InvalidationEvent{Kind: domain.InvalidateSubscription, ID: 8}},
+	}
+	for i, st := range steps {
+		before := tx.calls
+		if err := st.fn(); err != nil {
+			t.Fatalf("%s: %v", st.name, err)
+		}
+		if len(pub.events) != i+1 || pub.events[i] != st.want {
+			t.Errorf("%s: events = %+v, want last %+v", st.name, pub.events, st.want)
+		}
+		if tx.calls == before {
+			t.Errorf("%s: write and publish must run inside a transaction", st.name)
+		}
+	}
+}
+
+// Если публикация не удалась, правка считается неудачной (транзакция откатывается),
+// а локальные кэши не сбрасываются: данные не изменились.
+func TestPublishFailureFailsMutation(t *testing.T) {
+	boom := errors.New("notify failed")
+	on := true
+	cat := &recordingCatalog{}
+	s := New(mutationRepo{&fakeRepo{}}, &fakeTx{}, fakeHasher{},
+		WithInvalidator(&fakePublisher{err: boom}), WithCatalogInvalidator(cat))
+	if _, err := s.UpdateChannel(context.Background(), 1, ChannelPatch{IsActive: &on}); !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want publish error", err)
+	}
+	if cat.n != 0 {
+		t.Fatalf("catalog invalidated %d times after failed mutation", cat.n)
+	}
+}

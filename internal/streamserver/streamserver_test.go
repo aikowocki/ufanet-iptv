@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -218,4 +219,68 @@ func mustSign(t *testing.T, s *stream.Signer, rawURL string) string {
 		t.Fatal(err)
 	}
 	return link
+}
+
+// countingSigner считает подписи сегментов.
+type countingSigner struct {
+	*stream.Signer
+	segs atomic.Int32
+}
+
+func (c *countingSigner) SignUntil(raw string, uid int64, exp time.Time) (string, error) {
+	c.segs.Add(1)
+	return c.Signer.SignUntil(raw, uid, exp)
+}
+
+func setupCounting(t *testing.T, src Source) (http.Handler, *countingSigner, *stream.Signer, *time.Time) {
+	t.Helper()
+	now := t0
+	s, err := stream.New([]byte("test-key"), func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := &countingSigner{Signer: s}
+	return NewHandler(slog.New(slog.DiscardHandler), cs, src), cs, s, &now
+}
+
+func TestSignedPlaylistIsCachedPerUserAndVersion(t *testing.T) {
+	src := defaultSource()
+	h, cs, s, _ := setupCounting(t, src)
+	alice := signed(t, s, "/live/1/index.m3u8", 1)
+	bob := signed(t, s, "/live/1/index.m3u8", 2)
+
+	a1 := do(h, http.MethodGet, alice).Body.String()
+	signedOnce := cs.segs.Load()
+	if signedOnce != 2 {
+		t.Fatalf("first request signed %d segments, want 2", signedOnce)
+	}
+	if a2 := do(h, http.MethodGet, alice).Body.String(); a2 != a1 || cs.segs.Load() != signedOnce {
+		t.Fatalf("repeat request must reuse the cached playlist (segments signed: %d)", cs.segs.Load())
+	}
+
+	// Другой пользователь получает свои подписи, а не закэшированные чужие.
+	b := do(h, http.MethodGet, bob).Body.String()
+	if b == a1 || !strings.Contains(b, "uid=2") || strings.Contains(b, "uid=1") {
+		t.Fatalf("bob got playlist with foreign signatures:\n%s", b)
+	}
+
+	// Новая версия плейлиста подписывается заново.
+	src.files["/live/1/index.m3u8"] = fakePlaylist + "#EXTINF:2.0,\nseg00003.ts\n"
+	before := cs.segs.Load()
+	got := do(h, http.MethodGet, alice).Body.String()
+	if !strings.Contains(got, "seg00003.ts?") || cs.segs.Load() == before {
+		t.Fatalf("new playlist version was not re-signed:\n%s", got)
+	}
+}
+
+func TestExpiredLinkDeniedEvenIfPlaylistCached(t *testing.T) {
+	h, _, s, now := setupCounting(t, defaultSource())
+	link := signed(t, s, "/live/1/index.m3u8", 1)
+	if rec := do(h, http.MethodGet, link); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	*now = now.Add(2 * time.Minute)
+	if rec := do(h, http.MethodGet, link); rec.Code != http.StatusForbidden {
+		t.Fatalf("expired link: status = %d, want 403", rec.Code)
+	}
 }

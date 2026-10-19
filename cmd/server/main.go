@@ -20,6 +20,7 @@ import (
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/admin"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/auth"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/catalog"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/invalidate"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/playback"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/subscription"
 )
@@ -84,13 +85,31 @@ func run() error {
 	adminRepo := postgres.NewAdminRepository(exec)
 	txm := postgres.NewTxManager(pool)
 
+	// Кэш успешных проверок пароля: без него каждый запрос платит за argon2id.
+	authSvc, err := auth.NewCached(auth.New(users, hasher, dummyHash), cfg.AuthCacheTTL, nil)
+	if err != nil {
+		return fmt.Errorf("auth cache: %w", err)
+	}
+	catalogSvc, err := catalog.NewCached(catalog.New(channels), channels, cfg.CacheTTL, nil)
+	if err != nil {
+		return fmt.Errorf("catalog cache: %w", err)
+	}
+	// События инвалидации от всех экземпляров (и от этого тоже): правки админа видны сразу,
+	// а не после TTL кэшей. Соединение закрывается при остановке по ctx.
+	listener := postgres.NewListener(log, cfg.DB.URL, invalidate.New(authSvc, catalogSvc))
+	listenerDone := make(chan struct{})
+	go func() {
+		defer close(listenerDone)
+		listener.Run(ctx)
+	}()
 	srv := &http.Server{
 		Handler: rest.NewRouter(log, pool.Ping, rest.Deps{
-			Auth:          auth.New(users, hasher, dummyHash),
-			Channels:      catalog.New(channels),
+			Auth:          authSvc,
+			Channels:      catalogSvc,
 			Playback:      playback.New(channels, signer, cfg.StreamBaseURL, cfg.StreamTokenTTL),
 			Subscriptions: subscription.New(subscriptions),
-			Admin:         admin.New(adminRepo, txm, hasher),
+			Admin: admin.New(adminRepo, txm, hasher, admin.WithUserInvalidator(authSvc), admin.WithCatalogInvalidator(catalogSvc),
+				admin.WithInvalidator(postgres.NewNotifier(exec))),
 		}),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
@@ -110,6 +129,7 @@ func run() error {
 	if err := httpserve.Serve(ctx, srv, ln, cfg.ShutdownTimeout); err != nil {
 		return err
 	}
+	<-listenerDone
 	log.Info("server stopped")
 	return nil
 }

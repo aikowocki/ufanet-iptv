@@ -1,0 +1,34 @@
+File: server
+Build ID: fd17c9e2016613214850581d7c1d5172dd741732
+Type: alloc_space
+Time: 2026-10-19 13:54:09 CEST
+Duration: 20.01s, Total samples = 6562.62MB 
+Showing nodes accounting for 6354.67MB, 96.83% of 6562.62MB total
+Dropped 85 nodes (cum <= 32.81MB)
+Showing top 25 nodes out of 46
+      flat  flat%   sum%        cum   cum%
+ 4202.01MB 64.03% 64.03%  5127.62MB 78.13%  github.com/aikowocki/ufanet-iptv/internal/infra/postgres.(*ChannelRepository).ListChannelsForUser
+  635.52MB  9.68% 73.71%   635.52MB  9.68%  github.com/jackc/pgx/v5/pgtype.scanPlanString.Scan
+  568.44MB  8.66% 82.38%  5815.09MB 88.61%  github.com/aikowocki/ufanet-iptv/internal/transport/rest.api.handleChannels
+  142.54MB  2.17% 84.55%   142.54MB  2.17%  net/http.(*Request).WithContext (partial-inline)
+   99.52MB  1.52% 86.06%   104.52MB  1.59%  net/textproto.readMIMEHeader
+   98.03MB  1.49% 87.56%    98.03MB  1.49%  net/http.Header.Clone (inline)
+   87.03MB  1.33% 88.88%    90.03MB  1.37%  net/textproto.MIMEHeader.Set (inline)
+   72.02MB  1.10% 89.98%   213.05MB  3.25%  net/http.readRequestLimit
+   71.51MB  1.09% 91.07%   302.57MB  4.61%  net/http.(*conn).readRequest
+   68.52MB  1.04% 92.11%    68.52MB  1.04%  github.com/jackc/pgx/v5.(*Conn).getRows
+   58.51MB  0.89% 93.01%    58.51MB  0.89%  context.(*cancelCtx).propagateCancel
+      53MB  0.81% 93.81%   105.01MB  1.60%  crypto/internal/fips140/hmac.New[go.shape.interface { BlockSize int; Reset; Size int; Sum []uint8; Write  }]
+   52.01MB  0.79% 94.61%    52.01MB  0.79%  crypto/internal/fips140/sha256.New (inline)
+   32.50MB   0.5% 95.10%   668.02MB 10.18%  github.com/jackc/pgx/v5.(*baseRows).Scan
+   29.50MB  0.45% 95.55%   112.01MB  1.71%  github.com/jackc/pgx/v5/pgconn/ctxwatch.(*ContextWatcher).Watch
+      26MB   0.4% 95.95%       37MB  0.56%  golang.org/x/sync/semaphore.(*Weighted).Acquire
+      24MB  0.37% 96.31%    82.51MB  1.26%  context.AfterFunc
+      12MB  0.18% 96.50%  6037.13MB 91.99%  github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.BasicAuth.func2.func1
+      10MB  0.15% 96.65%   121.01MB  1.84%  github.com/aikowocki/ufanet-iptv/internal/usecase/auth.(*Cached).key
+    8.50MB  0.13% 96.78%  6045.63MB 92.12%  github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.AccessLog.func1.1
+    3.50MB 0.053% 96.83%  6231.18MB 94.95%  github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware.RequestID.func1
+         0     0% 96.83%   105.01MB  1.60%  crypto/hmac.New
+         0     0% 96.83%    52.01MB  0.79%  crypto/internal/fips140hash.UnwrapNew[go.shape.interface { BlockSize int; Reset; Size int; Sum []uint8; Write  }].func1
+         0     0% 96.83%    52.01MB  0.79%  crypto/sha256.New
+         0     0% 96.83%   253.59MB  3.86%  github.com/aikowocki/ufanet-iptv/internal/infra/postgres.(*Executor).Query

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/aikowocki/ufanet-iptv/internal/domain"
 )
@@ -125,6 +126,51 @@ func TestChannelRepository(t *testing.T) {
 	for _, p := range []string{"/c", "/missing"} { // выключенный и несуществующий
 		if _, err := repo.GetChannelByStreamPath(ctx, p); !errors.Is(err, domain.ErrNotFound) {
 			t.Errorf("GetChannelByStreamPath(%q) err = %v, want ErrNotFound", p, err)
+		}
+	}
+}
+
+// Интеграционный тест: пропускается без TEST_DATABASE_URL.
+func TestNextSubscriptionExpiry(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	repo := NewChannelRepository(NewExecutor(pool))
+	for _, q := range []string{
+		`INSERT INTO users (login, password_hash) VALUES ('limited','h'),('forever','h'),('none','h')`,
+		`INSERT INTO packages (name) VALUES ('a'),('b'),('c'),('d'),('e')`,
+		`INSERT INTO subscriptions (user_id, package_id, is_active, expires_at)
+			SELECT u.id, p.id, s.active, s.exp FROM users u, packages p,
+			(VALUES ('limited','a', true,  now() + interval '2 hours'),
+			        ('limited','b', true,  now() + interval '30 minutes'),
+			        ('limited','c', true,  now() - interval '1 minute'),
+			        ('limited','d', false, now() + interval '1 minute'),
+			        ('limited','e', true,  NULL::timestamptz),
+			        ('forever','a', true,  NULL)) AS s(login, pkg, active, exp)
+			WHERE u.login = s.login AND p.name = s.pkg`,
+	} {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id := func(login string) int64 {
+		var uid int64
+		if err := pool.QueryRow(ctx, `SELECT id FROM users WHERE login = $1`, login).Scan(&uid); err != nil {
+			t.Fatal(err)
+		}
+		return uid
+	}
+
+	// Берётся ближайшая из действующих: не просроченная, не выключенная и не бессрочная.
+	d, ok, err := repo.NextSubscriptionExpiry(ctx, id("limited"))
+	if err != nil || !ok {
+		t.Fatalf("limited: ok = %v, err = %v", ok, err)
+	}
+	if d < 29*time.Minute || d > 30*time.Minute {
+		t.Errorf("limited: remaining = %s, want about 30m", d)
+	}
+	for _, login := range []string{"forever", "none"} {
+		if _, ok, err := repo.NextSubscriptionExpiry(ctx, id(login)); err != nil || ok {
+			t.Errorf("%s: ok = %v, err = %v; want no bound", login, ok, err)
 		}
 	}
 }

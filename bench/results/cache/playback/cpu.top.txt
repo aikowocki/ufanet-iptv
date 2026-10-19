@@ -1,0 +1,34 @@
+File: server
+Build ID: fd17c9e2016613214850581d7c1d5172dd741732
+Type: cpu
+Time: 2026-10-19 13:54:19 CEST
+Duration: 20s, Total samples = 32.65s (163.25%)
+Showing nodes accounting for 21.41s, 65.57% of 32.65s total
+Dropped 647 nodes (cum <= 0.16s)
+Showing top 25 nodes out of 207
+      flat  flat%   sum%        cum   cum%
+    17.40s 53.29% 53.29%     17.40s 53.29%  internal/runtime/syscall/linux.Syscall6
+     0.85s  2.60% 55.90%      0.85s  2.60%  runtime.nanotime (inline)
+     0.43s  1.32% 57.21%      0.61s  1.87%  time.now
+     0.21s  0.64% 57.86%      0.21s  0.64%  runtime.futex
+     0.20s  0.61% 58.47%      0.27s  0.83%  runtime.tryDeferToSpanScan
+     0.18s  0.55% 59.02%      0.18s  0.55%  runtime.memclrNoHeapPointers
+     0.18s  0.55% 59.57%      0.21s  0.64%  runtime.unlock2
+     0.17s  0.52% 60.09%      0.33s  1.01%  runtime.selectgo
+     0.16s  0.49% 60.58%      0.19s  0.58%  internal/sync.(*Mutex).Lock
+     0.15s  0.46% 61.04%      0.39s  1.19%  runtime.mapaccess2_faststr
+     0.14s  0.43% 61.47%      0.20s  0.61%  runtime.mallocgcSmallScanNoHeaderSC5
+     0.13s   0.4% 61.87%      0.18s  0.55%  internal/runtime/maps.(*Map).getWithoutKeySmallFastStr
+     0.13s   0.4% 62.27%      2.06s  6.31%  runtime.mallocgc
+     0.12s  0.37% 62.63%      0.57s  1.75%  internal/poll.runtime_pollSetDeadline
+     0.12s  0.37% 63.00%      0.75s  2.30%  runtime.netpoll
+     0.11s  0.34% 63.34%      0.22s  0.67%  runtime.mallocgcSmallScanNoHeaderSC2
+     0.10s  0.31% 63.64%      0.41s  1.26%  crypto/internal/fips140/hmac.New[go.shape.interface { BlockSize int; Reset; Size int; Sum []uint8; Write  }]
+     0.10s  0.31% 63.95%      0.21s  0.64%  runtime.casgstatus
+     0.09s  0.28% 64.23%      0.35s  1.07%  github.com/jackc/pgx/v5.(*baseRows).Scan
+     0.09s  0.28% 64.50%      0.26s   0.8%  runtime.scanObject
+     0.08s  0.25% 64.75%      0.43s  1.32%  runtime.mapassign_faststr
+     0.07s  0.21% 64.96%      0.21s  0.64%  github.com/jackc/pgx/v5/internal/stmtcache.(*LRUCache).Get
+     0.07s  0.21% 65.18%      0.23s   0.7%  runtime.mallocgcSmallScanNoHeaderSC7
+     0.07s  0.21% 65.39%      0.29s  0.89%  runtime.scanObjectsSmall
+     0.06s  0.18% 65.57%      0.78s  2.39%  runtime.mallocgcSmallScanNoHeader

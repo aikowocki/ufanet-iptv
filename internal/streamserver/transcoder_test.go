@@ -250,3 +250,33 @@ func TestGeneratedInput(t *testing.T) {
 		t.Error("generated source is not deterministic")
 	}
 }
+
+func TestTranscoderPlaylistCache(t *testing.T) {
+	tc, _, _ := newTestTranscoder(t, "font.ttf", time.Minute)
+	ctx := context.Background()
+	const p = "/live/channel1/index.m3u8"
+
+	rc, err := tc.Open(ctx, p)
+	first := readAll(t, rc, err)
+	tc.mu.Lock()
+	s := tc.sessions[p]
+	tc.mu.Unlock()
+	file := filepath.Join(s.dir, "index.m3u8")
+
+	// Пока запись свежа, изменение файла не видно и файл не читается заново.
+	tc.playlistTTL = time.Hour
+	if err := os.WriteFile(file, []byte("#EXTM3U\nchanged\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rc, err = tc.Open(ctx, p)
+	if got := readAll(t, rc, err); got != first {
+		t.Fatalf("fresh cache: playlist = %q, want cached %q", got, first)
+	}
+
+	// После истечения TTL плейлист перечитывается и отдаётся новая версия.
+	tc.playlistTTL = 0
+	rc, err = tc.Open(ctx, p)
+	if got := readAll(t, rc, err); got != "#EXTM3U\nchanged\n" {
+		t.Fatalf("after TTL: playlist = %q, want the updated file", got)
+	}
+}

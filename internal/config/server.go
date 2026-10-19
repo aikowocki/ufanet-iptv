@@ -20,6 +20,10 @@ type Config struct {
 	HashConcurrency int
 	// HashWaitTimeout — сколько ждать свободный слот проверки пароля.
 	HashWaitTimeout time.Duration
+	// AuthCacheTTL — сколько кэшируется успешная проверка пароля.
+	AuthCacheTTL time.Duration
+	// CacheTTL — предельный срок жизни записи в кэше списка каналов.
+	CacheTTL time.Duration
 	// StreamBaseURL — адрес стрим-сервера (http или https), к которому добавляется stream_path канала.
 	StreamBaseURL string
 	// StreamTokenTTL — срок действия подписанной ссылки.
@@ -42,6 +46,8 @@ func Load(getenv func(string) string) (Config, error) {
 
 			HashConcurrency: l.positiveInt("HASH_CONCURRENCY", runtime.GOMAXPROCS(0)),
 			HashWaitTimeout: l.duration("HASH_WAIT_TIMEOUT", 2*time.Second),
+			AuthCacheTTL:    l.duration("AUTH_CACHE_TTL", 45*time.Second),
+			CacheTTL:        l.duration("CACHE_TTL", 10*time.Second),
 			StreamBaseURL:   l.httpURL("STREAM_BASE_URL", "http://localhost:8081"),
 			StreamTokenTTL:  l.duration("STREAM_TOKEN_TTL", 5*time.Minute),
 		}

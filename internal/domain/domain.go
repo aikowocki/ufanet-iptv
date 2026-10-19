@@ -110,3 +110,24 @@ type OptionalTime struct {
 type ReferenceError struct{ Message string }
 
 func (e *ReferenceError) Error() string { return "reference: " + e.Message }
+
+// InvalidationKind — что изменилось и какие кэши надо сбросить.
+type InvalidationKind string
+
+// Виды событий инвалидации кэшей.
+const (
+	// InvalidateUser: изменён пользователь (пароль, активность, роль); ID - id пользователя.
+	InvalidateUser InvalidationKind = "user"
+	// InvalidateChannel: изменён канал; ID - id канала.
+	InvalidateChannel InvalidationKind = "channel"
+	// InvalidatePackage: изменён пакет или его состав; ID - id пакета.
+	InvalidatePackage InvalidationKind = "package"
+	// InvalidateSubscription: изменена или выдана подписка; ID - id подписки или пользователя.
+	InvalidateSubscription InvalidationKind = "subscription"
+)
+
+// InvalidationEvent сообщает всем экземплярам сервиса, что данные изменились.
+type InvalidationEvent struct {
+	Kind InvalidationKind
+	ID   int64
+}

@@ -127,16 +127,75 @@ type SubscriptionInput struct {
 	ExpiresAt domain.OptionalTime
 }
 
+// UserInvalidator сбрасывает кэши, в которых хранится состояние пользователя
+// (например, кэш проверок пароля).
+type UserInvalidator interface {
+	InvalidateUser(id int64)
+}
+
+// CatalogInvalidator сбрасывает кэш каталога каналов.
+type CatalogInvalidator interface {
+	InvalidateCatalog()
+}
+
+// Invalidator рассылает событие об изменении данных всем экземплярам сервиса.
+// Реализация выполняет публикацию в транзакции из ctx, поэтому вместе с откатом записи
+// откатывается и уведомление.
+type Invalidator interface {
+	Publish(ctx context.Context, ev domain.InvalidationEvent) error
+}
+
+// WithInvalidator задаёт публикацию событий инвалидации для других экземпляров.
+func WithInvalidator(inv Invalidator) Option {
+	return func(s *Service) { s.publisher = inv }
+}
+
+// publish отправляет событие, если публикация настроена. Вызывается внутри транзакции записи.
+func (s *Service) publish(ctx context.Context, kind domain.InvalidationKind, id int64) error {
+	if s.publisher == nil {
+		return nil
+	}
+	return s.publisher.Publish(ctx, domain.InvalidationEvent{Kind: kind, ID: id})
+}
+
+// Option настраивает Service.
+type Option func(*Service)
+
+// WithUserInvalidator задаёт, кого уведомлять об изменении пользователя.
+func WithUserInvalidator(inv UserInvalidator) Option {
+	return func(s *Service) { s.invalidator = inv }
+}
+
+// WithCatalogInvalidator задаёт, кого уведомлять об изменении каналов, пакетов и подписок.
+func WithCatalogInvalidator(inv CatalogInvalidator) Option {
+	return func(s *Service) { s.catalog = inv }
+}
+
+// catalogChanged вызывается после успешного изменения того, от чего зависит список каналов
+// пользователя: каналов, пакетов, их состава и подписок.
+func (s *Service) catalogChanged() {
+	if s.catalog != nil {
+		s.catalog.InvalidateCatalog()
+	}
+}
+
 // Service — админские сценарии.
 type Service struct {
-	repo   Repository
-	tx     usecase.TxManager
-	hasher PasswordHasher
+	repo        Repository
+	tx          usecase.TxManager
+	hasher      PasswordHasher
+	invalidator UserInvalidator
+	catalog     CatalogInvalidator
+	publisher   Invalidator
 }
 
 // New создаёт Service.
-func New(repo Repository, tx usecase.TxManager, hasher PasswordHasher) *Service {
-	return &Service{repo: repo, tx: tx, hasher: hasher}
+func New(repo Repository, tx usecase.TxManager, hasher PasswordHasher, opts ...Option) *Service {
+	s := &Service{repo: repo, tx: tx, hasher: hasher}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func invalid(format string, args ...any) error {
@@ -210,9 +269,21 @@ func (s *Service) UpdateUser(ctx context.Context, actor domain.User, id int64, i
 		}
 		patch.PasswordHash = &hash
 	}
-	u, err := s.repo.UpdateUser(ctx, id, patch)
+	var u domain.User
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		var err error
+		if u, err = s.repo.UpdateUser(ctx, id, patch); err != nil {
+			return err
+		}
+		return s.publish(ctx, domain.InvalidateUser, id)
+	})
 	if err != nil {
 		return domain.User{}, fmt.Errorf("update user: %w", err)
+	}
+	// Пароль, флаг активности и роль попадают в кэш проверок, поэтому после изменения
+	// запись сбрасывается сразу, а не по истечении TTL.
+	if s.invalidator != nil {
+		s.invalidator.InvalidateUser(id)
 	}
 	return u, nil
 }
@@ -237,12 +308,21 @@ func (s *Service) CreateChannel(ctx context.Context, in ChannelInput) (domain.Ch
 	if err := validateStreamPath(in.StreamPath); err != nil {
 		return domain.Channel{}, err
 	}
-	c, err := s.repo.CreateChannel(ctx, domain.Channel{
-		Number: in.Number, Name: in.Name, StreamPath: in.StreamPath, IsActive: boolOr(in.IsActive, true),
+	var c domain.Channel
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		var err error
+		c, err = s.repo.CreateChannel(ctx, domain.Channel{
+			Number: in.Number, Name: in.Name, StreamPath: in.StreamPath, IsActive: boolOr(in.IsActive, true),
+		})
+		if err != nil {
+			return err
+		}
+		return s.publish(ctx, domain.InvalidateChannel, c.ID)
 	})
 	if err != nil {
 		return domain.Channel{}, fmt.Errorf("create channel: %w", err)
 	}
+	s.catalogChanged()
 	return c, nil
 }
 
@@ -266,10 +346,18 @@ func (s *Service) UpdateChannel(ctx context.Context, id int64, p ChannelPatch) (
 			return domain.Channel{}, err
 		}
 	}
-	c, err := s.repo.UpdateChannel(ctx, id, p)
+	var c domain.Channel
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		var err error
+		if c, err = s.repo.UpdateChannel(ctx, id, p); err != nil {
+			return err
+		}
+		return s.publish(ctx, domain.InvalidateChannel, id)
+	})
 	if err != nil {
 		return domain.Channel{}, fmt.Errorf("update channel: %w", err)
 	}
+	s.catalogChanged()
 	return c, nil
 }
 
@@ -287,10 +375,19 @@ func (s *Service) CreatePackage(ctx context.Context, in PackageInput) (domain.Pa
 	if err := validateName("name", in.Name); err != nil {
 		return domain.Package{}, err
 	}
-	p, err := s.repo.CreatePackage(ctx, domain.Package{Name: in.Name, IsActive: boolOr(in.IsActive, true)})
+	var p domain.Package
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		var err error
+		p, err = s.repo.CreatePackage(ctx, domain.Package{Name: in.Name, IsActive: boolOr(in.IsActive, true)})
+		if err != nil {
+			return err
+		}
+		return s.publish(ctx, domain.InvalidatePackage, p.ID)
+	})
 	if err != nil {
 		return domain.Package{}, fmt.Errorf("create package: %w", err)
 	}
+	s.catalogChanged()
 	return p, nil
 }
 
@@ -304,10 +401,18 @@ func (s *Service) UpdatePackage(ctx context.Context, id int64, p PackagePatch) (
 			return domain.Package{}, err
 		}
 	}
-	out, err := s.repo.UpdatePackage(ctx, id, p)
+	var out domain.Package
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		var err error
+		if out, err = s.repo.UpdatePackage(ctx, id, p); err != nil {
+			return err
+		}
+		return s.publish(ctx, domain.InvalidatePackage, id)
+	})
 	if err != nil {
 		return domain.Package{}, fmt.Errorf("update package: %w", err)
 	}
+	s.catalogChanged()
 	return out, nil
 }
 
@@ -337,11 +442,15 @@ func (s *Service) SetPackageChannels(ctx context.Context, packageID int64, chann
 		}
 		p, err := s.repo.GetPackage(ctx, packageID)
 		out = p
-		return err
+		if err != nil {
+			return err
+		}
+		return s.publish(ctx, domain.InvalidatePackage, packageID)
 	})
 	if err != nil {
 		return domain.Package{}, fmt.Errorf("set package channels: %w", err)
 	}
+	s.catalogChanged()
 	return out, nil
 }
 
@@ -383,11 +492,15 @@ func (s *Service) CreateSubscription(ctx context.Context, userID int64, in Subsc
 			UserID: userID, PackageID: in.PackageID, IsActive: boolOr(in.IsActive, true), ExpiresAt: in.ExpiresAt.Value,
 		})
 		out = sub
-		return err
+		if err != nil {
+			return err
+		}
+		return s.publish(ctx, domain.InvalidateSubscription, sub.ID)
 	})
 	if err != nil {
 		return domain.UserSubscription{}, fmt.Errorf("create subscription: %w", err)
 	}
+	s.catalogChanged()
 	return out, nil
 }
 
@@ -396,10 +509,18 @@ func (s *Service) UpdateSubscription(ctx context.Context, id int64, p Subscripti
 	if p.IsActive == nil && !p.ExpiresAt.Set {
 		return domain.UserSubscription{}, invalid("no fields to update")
 	}
-	sub, err := s.repo.UpdateSubscription(ctx, id, p)
+	var sub domain.UserSubscription
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		var err error
+		if sub, err = s.repo.UpdateSubscription(ctx, id, p); err != nil {
+			return err
+		}
+		return s.publish(ctx, domain.InvalidateSubscription, id)
+	})
 	if err != nil {
 		return domain.UserSubscription{}, fmt.Errorf("update subscription: %w", err)
 	}
+	s.catalogChanged()
 	return sub, nil
 }
 

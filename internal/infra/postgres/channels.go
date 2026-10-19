@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -72,6 +73,23 @@ func (r *ChannelRepository) ListChannelsForUser(ctx context.Context, userID int6
 		return nil, fmt.Errorf("iterate channels: %w", err)
 	}
 	return list, nil
+}
+
+// NextSubscriptionExpiry возвращает, через сколько истечёт ближайшая из действующих подписок
+// пользователя с ограниченным сроком. ok == false, если таких подписок нет. Срок считается
+// на стороне БД относительно её now(), поэтому расхождение часов БД и сервиса не влияет.
+func (r *ChannelRepository) NextSubscriptionExpiry(ctx context.Context, userID int64) (d time.Duration, ok bool, err error) {
+	var secs *float64
+	err = r.db.QueryRow(ctx,
+		`SELECT EXTRACT(EPOCH FROM min(expires_at) - now())::float8
+		 FROM subscriptions WHERE user_id = $1 AND is_active AND expires_at > now()`, userID).Scan(&secs)
+	if err != nil {
+		return 0, false, fmt.Errorf("query next subscription expiry: %w", err)
+	}
+	if secs == nil {
+		return 0, false, nil
+	}
+	return time.Duration(*secs * float64(time.Second)), true, nil
 }
 
 // HasChannelAccess сообщает, есть ли у пользователя действующая подписка на включённый канал.

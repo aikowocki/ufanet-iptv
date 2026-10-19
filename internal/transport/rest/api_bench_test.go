@@ -11,6 +11,7 @@ import (
 	"github.com/aikowocki/ufanet-iptv/internal/domain"
 	"github.com/aikowocki/ufanet-iptv/internal/infra/passhash"
 	"github.com/aikowocki/ufanet-iptv/internal/transport/rest"
+	"github.com/aikowocki/ufanet-iptv/internal/transport/rest/middleware"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/auth"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/catalog"
 )
@@ -27,7 +28,12 @@ func (c benchChannels) ListChannelsForUser(context.Context, int64) ([]domain.Cha
 
 // BenchmarkChannels гоняет GET /api/v1/channels через настоящий роутер, middleware и argon2id.
 // БД подменена: измеряется накладная стоимость самого сервиса, без сети и SQL.
-func BenchmarkChannels(b *testing.B) {
+func BenchmarkChannels(b *testing.B) { runChannelsBench(b, false) }
+
+// BenchmarkChannelsCachedAuth - то же с кэшем успешных проверок пароля.
+func BenchmarkChannelsCachedAuth(b *testing.B) { runChannelsBench(b, true) }
+
+func runChannelsBench(b *testing.B, cached bool) {
 	ctx := context.Background()
 	hasher := passhash.New(4, time.Minute)
 	enc, err := hasher.Hash(ctx, "alice123")
@@ -42,15 +48,23 @@ func BenchmarkChannels(b *testing.B) {
 		}
 	}
 	users := benchUsers{domain.User{ID: 1, Login: "alice", PasswordHash: enc, IsActive: true}}
+	var authn middleware.Authenticator = auth.New(users, hasher, enc)
+	if cached {
+		c, err := auth.NewCached(authn.(auth.Authenticator), time.Minute, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+		authn = c
+	}
 	h := rest.NewRouter(slog.New(slog.DiscardHandler), nil, rest.Deps{
-		Auth:     auth.New(users, hasher, enc),
+		Auth:     authn,
 		Channels: catalog.New(benchChannels{list}),
 	})
 	b.ReportAllocs()
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/channels", nil)
+			req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/v1/channels", nil)
 			req.SetBasicAuth("alice", "alice123")
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)

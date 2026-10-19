@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aikowocki/ufanet-iptv/internal/infra/cache"
 	"github.com/aikowocki/ufanet-iptv/internal/infra/stream"
 )
 
@@ -33,6 +34,7 @@ type Signer interface {
 // клиент должен запросить у API новую ссылку.
 func NewHandler(log *slog.Logger, signer Signer, src Source) http.Handler {
 	mux := http.NewServeMux()
+	signed := cache.NewTTL[signedKey, []byte](signedPlaylistTTL, nil)
 	mux.HandleFunc("GET /live/{path...}", func(w http.ResponseWriter, r *http.Request) {
 		// В запросе сервера URL содержит только путь и query, а подписан именно путь.
 		claims, err := signer.VerifyLink(r.URL.String())
@@ -81,7 +83,7 @@ func NewHandler(log *slog.Logger, signer Signer, src Source) http.Handler {
 		}
 		body, err := io.ReadAll(io.LimitReader(rc, maxPlaylistSize))
 		if err == nil {
-			body, err = signSegments(signer, r.URL.Path, claims, body)
+			body, err = signedPlaylist(signed, signer, r.URL.Path, claims, body)
 		}
 		if err != nil {
 			log.Error("prepare playlist", "path", r.URL.Path, "err", err)
@@ -93,6 +95,37 @@ func NewHandler(log *slog.Logger, signer Signer, src Source) http.Handler {
 		_, _ = w.Write(body) //nolint:gosec // это HLS-плейлист, а не HTML
 	})
 	return allowAnyOrigin(mux)
+}
+
+// signedPlaylistTTL — как долго живёт подписанный плейлист в кэше. Плейлист меняется раз
+// в сегмент, и старые версии сразу перестают запрашиваться, так что запись нужна считанные секунды.
+const signedPlaylistTTL = 10 * time.Second
+
+// signedKey однозначно определяет результат signSegments: путь, пользователь и срок ссылки
+// задают подписи сегментов, а body (версия плейлиста) - их набор. Новая версия плейлиста
+// даёт новый ключ, поэтому устаревший результат отдать невозможно, а подпись другого
+// пользователя или с другим сроком в ответ не попадёт.
+type signedKey struct {
+	path    string
+	uid     int64
+	expires int64
+	body    string
+}
+
+// signedPlaylist возвращает плейлист с подписанными сегментами, подписывая его один раз
+// на каждую версию плейлиста, пользователя и срок ссылки. Подпись входящей ссылки к этому
+// моменту уже проверена обработчиком, кэш её не заменяет.
+func signedPlaylist(c *cache.TTL[signedKey, []byte], signer Signer, playlistPath string, claims stream.Claims, body []byte) ([]byte, error) {
+	key := signedKey{path: playlistPath, uid: claims.UID, expires: claims.Expires.Unix(), body: string(body)}
+	if out, ok := c.Get(key); ok {
+		return out, nil
+	}
+	out, err := signSegments(signer, playlistPath, claims, body)
+	if err != nil {
+		return nil, err
+	}
+	c.Set(key, out, signedPlaylistTTL)
+	return out, nil
 }
 
 // allowAnyOrigin разрешает веб-плееру (hls.js) со страницы на другом origin читать плейлист

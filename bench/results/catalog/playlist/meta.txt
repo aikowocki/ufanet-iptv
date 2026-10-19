@@ -1,0 +1,8 @@
+label:     catalog
+scenario:  playlist
+date:      2026-10-19T12:14:44Z
+git:       e748b53-dirty
+host:      Darwin arm64, Apple M3 Pro
+go:        go version go1.27.2 darwin/arm64
+load:      hey -c 50 -z 30s (closed loop), warmup 5s, cpu profile 20s
+limits:    app/stream cpus=2 mem=1g (docker-compose.loadtest.yml)

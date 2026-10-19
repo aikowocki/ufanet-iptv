@@ -54,7 +54,7 @@ func BenchmarkPlaylist(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, link, nil))
+		h.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, link, nil))
 		if rec.Code != http.StatusOK {
 			b.Fatalf("status %d", rec.Code)
 		}
