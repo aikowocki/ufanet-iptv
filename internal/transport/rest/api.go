@@ -38,6 +38,7 @@ type Deps struct {
 	Playback LinkBuilder
 	// Subscriptions необязателен: без него GET /api/v1/subscriptions не регистрируется.
 	Subscriptions SubscriptionLister
+	Admin         AdminService
 }
 
 type channelDTO struct {
@@ -81,6 +82,9 @@ func (a api) register(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/channels/{id}/playback", auth(http.HandlerFunc(a.handlePlayback)))
 	if a.deps.Subscriptions != nil {
 		mux.Handle("GET /api/v1/subscriptions", auth(http.HandlerFunc(a.handleSubscriptions)))
+	}
+	if a.deps.Admin != nil {
+		a.registerAdmin(mux)
 	}
 }
 

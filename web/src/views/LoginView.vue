@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ApiError, verify } from '../lib/api'
+import { ApiError, probeAdmin, verify } from '../lib/api'
 import { setCredentials } from '../lib/auth'
 
 const router = useRouter()
@@ -15,7 +15,8 @@ async function submit() {
   error.value = ''
   try {
     await verify(login.value, password.value)
-    setCredentials(login.value, password.value)
+    const admin = await probeAdmin(login.value, password.value)
+    setCredentials(login.value, password.value, admin)
     await router.replace({ name: 'channels' })
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) error.value = 'Неверный логин или пароль'

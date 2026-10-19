@@ -14,6 +14,8 @@ const (
 	CodeUnauthorized     = "unauthorized"
 	CodeForbidden        = "forbidden"
 	CodeNotFound         = "not_found"
+	CodeConflict         = "conflict"
+	CodeUnprocessable    = "unprocessable_entity"
 	CodeMethodNotAllowed = "method_not_allowed"
 	CodeInternal         = "internal_error"
 	CodeUnavailable      = "service_unavailable"

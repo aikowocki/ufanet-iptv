@@ -17,6 +17,7 @@ import (
 	"github.com/aikowocki/ufanet-iptv/internal/infra/postgres"
 	"github.com/aikowocki/ufanet-iptv/internal/infra/stream"
 	"github.com/aikowocki/ufanet-iptv/internal/transport/rest"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/admin"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/auth"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/catalog"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/playback"
@@ -80,12 +81,16 @@ func run() error {
 	users := postgres.NewUserRepository(exec)
 	channels := postgres.NewChannelRepository(exec)
 	subscriptions := postgres.NewSubscriptionRepository(exec)
+	adminRepo := postgres.NewAdminRepository(exec)
+	txm := postgres.NewTxManager(pool)
+
 	srv := &http.Server{
 		Handler: rest.NewRouter(log, pool.Ping, rest.Deps{
 			Auth:          auth.New(users, hasher, dummyHash),
 			Channels:      catalog.New(channels),
 			Playback:      playback.New(channels, signer, cfg.StreamBaseURL, cfg.StreamTokenTTL),
 			Subscriptions: subscription.New(subscriptions),
+			Admin:         admin.New(adminRepo, txm, hasher),
 		}),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,

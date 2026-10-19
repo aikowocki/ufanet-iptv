@@ -90,10 +90,27 @@ func TestMigrateAndSeed(t *testing.T) {
 		t.Errorf("subscriptions = %d, want %d", got, len(seedSubscriptionsList))
 	}
 
+	// Каналы с уникальными номерами и путями, пакеты ссылаются только на существующие номера.
+	var distinctPaths int
+	if err := pool.QueryRow(ctx, `SELECT count(DISTINCT stream_path) FROM channels`).Scan(&distinctPaths); err != nil || distinctPaths != len(seedChannels) {
+		t.Errorf("distinct stream paths = %d, err = %v; want %d", distinctPaths, err, len(seedChannels))
+	}
+	for _, p := range seedPackages {
+		var members int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM package_channels pc JOIN packages pk ON pk.id = pc.package_id WHERE pk.name = $1`, p.name).Scan(&members); err != nil || members != len(p.channelNumbers()) {
+			t.Errorf("package %q members = %d, err = %v; want %d", p.name, members, err, len(p.channelNumbers()))
+		}
+	}
 	// Демо-доступ: список всегда полный, но alice доступны все каналы, а bob только «Базовый»
 	// (пока не истёк срок).
 	repo := NewChannelRepository(NewExecutor(pool))
-	for login, want := range map[string]int{"alice": len(seedChannels), "bob": len(seedChannels) - 1} {
+	var base seedPackage
+	for _, p := range seedPackages {
+		if p.name == "Базовый" {
+			base = p
+		}
+	}
+	for login, want := range map[string]int{"alice": len(seedChannels), "bob": len(base.channels)} {
 		var id int64
 		if err := pool.QueryRow(ctx, `SELECT id FROM users WHERE login = $1`, login).Scan(&id); err != nil {
 			t.Fatal(err)
