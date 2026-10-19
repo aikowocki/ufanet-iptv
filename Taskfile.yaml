@@ -14,6 +14,11 @@ tasks:
     cmds:
       - go run ./cmd/server
 
+  run:stream:
+    desc: Запустить учебный стрим-сервер локально
+    cmds:
+      - go run ./cmd/stream
+
   vet:
     desc: Статическая проверка go vet
     cmds:

@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -11,11 +10,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/aikowocki/ufanet-iptv/internal/config"
+	"github.com/aikowocki/ufanet-iptv/internal/httpserve"
 	"github.com/aikowocki/ufanet-iptv/internal/infra/passhash"
 	"github.com/aikowocki/ufanet-iptv/internal/infra/postgres"
+	"github.com/aikowocki/ufanet-iptv/internal/infra/stream"
 	"github.com/aikowocki/ufanet-iptv/internal/transport/rest"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/auth"
 	"github.com/aikowocki/ufanet-iptv/internal/usecase/catalog"
@@ -45,11 +45,11 @@ func run() error {
 	// зависла, повторный Ctrl+C завершит процесс сразу.
 	context.AfterFunc(ctx, stop)
 
-	if err := postgres.Migrate(log, cfg.DatabaseURL); err != nil {
+	if err := postgres.Migrate(log, cfg.DB.URL); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 
-	pool, err := postgres.NewPool(ctx, log, cfg.DatabaseURL, cfg.DBMaxConnections, cfg.DBConnectTimeout)
+	pool, err := postgres.NewPool(ctx, log, cfg.DB.URL, cfg.DB.MaxConnections, cfg.DB.ConnectTimeout)
 	if err != nil {
 		return fmt.Errorf("postgres: %w", err)
 	}
@@ -68,6 +68,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("dummy hash: %w", err)
 	}
+	signer, err := stream.New([]byte(cfg.StreamSigningKey), nil)
+	if err != nil {
+		return fmt.Errorf("stream signer: %w", err)
+	}
+	if cfg.UsesDevSigningKey() {
+		log.Warn("STREAM_SIGNING_KEY is not set: using insecure dev key")
+	}
 	exec := postgres.NewExecutor(pool)
 	users := postgres.NewUserRepository(exec)
 	channels := postgres.NewChannelRepository(exec)
@@ -75,7 +82,7 @@ func run() error {
 		Handler: rest.NewRouter(log, pool.Ping, rest.Deps{
 			Auth:     auth.New(users, hasher, dummyHash),
 			Channels: catalog.New(channels),
-			Playback: playback.New(channels, cfg.StreamBaseURL),
+			Playback: playback.New(channels, signer, cfg.StreamBaseURL, cfg.StreamTokenTTL),
 		}),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
@@ -90,37 +97,9 @@ func run() error {
 	}
 	log.Info("server listening", "addr", ln.Addr().String())
 
-	if err := serve(ctx, srv, ln, cfg.ShutdownTimeout); err != nil {
+	if err := httpserve.Serve(ctx, srv, ln, cfg.ShutdownTimeout); err != nil {
 		return err
 	}
 	log.Info("server stopped")
-	return nil
-}
-
-// serve запускает srv на ln и блокируется до остановки. После отмены ctx сервер
-// перестаёт принимать новые соединения и ждёт завершения текущих запросов
-// не дольше shutdownTimeout.
-func serve(ctx context.Context, srv *http.Server, ln net.Listener, shutdownTimeout time.Duration) error {
-	errCh := make(chan error, 1)
-	go func() { errCh <- srv.Serve(ln) }()
-
-	select {
-	case err := <-errCh:
-		// Сервер упал сам, не из-за остановки.
-		return fmt.Errorf("serve: %w", err)
-	case <-ctx.Done():
-	}
-
-	// Контекст ctx уже отменён, поэтому для остановки нужен новый.
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
-
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		_ = srv.Close() // не дождались: закрываем оставшиеся соединения принудительно
-		return fmt.Errorf("shutdown: %w", err)
-	}
-	if err := <-errCh; !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("serve: %w", err)
-	}
 	return nil
 }

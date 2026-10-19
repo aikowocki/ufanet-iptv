@@ -1,4 +1,4 @@
-package main
+package httpserve
 
 import (
 	"context"
@@ -29,7 +29,7 @@ func TestServeGracefulShutdown(t *testing.T) {
 	defer cancel()
 
 	serveDone := make(chan error, 1)
-	go func() { serveDone <- serve(ctx, srv, ln, 5*time.Second) }()
+	go func() { serveDone <- Serve(ctx, srv, ln, 5*time.Second) }()
 
 	type result struct {
 		status int

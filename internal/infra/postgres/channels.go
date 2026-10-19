@@ -52,3 +52,19 @@ func (r *ChannelRepository) GetChannel(ctx context.Context, id int64) (domain.Ch
 	}
 	return c, nil
 }
+
+// GetChannelByStreamPath возвращает включённый канал по stream_path или domain.ErrNotFound.
+// Выключенный канал считается несуществующим.
+func (r *ChannelRepository) GetChannelByStreamPath(ctx context.Context, streamPath string) (domain.Channel, error) {
+	var c domain.Channel
+	err := r.db.QueryRow(ctx,
+		`SELECT id, number, name, stream_path, is_active FROM channels WHERE stream_path = $1 AND is_active`, streamPath,
+	).Scan(&c.ID, &c.Number, &c.Name, &c.StreamPath, &c.IsActive)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Channel{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.Channel{}, fmt.Errorf("query channel by stream path: %w", err)
+	}
+	return c, nil
+}

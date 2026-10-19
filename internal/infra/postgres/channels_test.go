@@ -30,4 +30,14 @@ func TestChannelRepository(t *testing.T) {
 	if _, err := repo.GetChannel(ctx, 1<<40); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("missing channel err = %v, want ErrNotFound", err)
 	}
+
+	byPath, err := repo.GetChannelByStreamPath(ctx, "/b")
+	if err != nil || byPath.Name != "B" {
+		t.Fatalf("GetChannelByStreamPath(/b) = %+v, %v", byPath, err)
+	}
+	for _, p := range []string{"/c", "/missing"} { // выключенный и несуществующий
+		if _, err := repo.GetChannelByStreamPath(ctx, p); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("GetChannelByStreamPath(%q) err = %v, want ErrNotFound", p, err)
+		}
+	}
 }
