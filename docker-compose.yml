@@ -30,7 +30,7 @@ services:
       - path: .env
         required: false
     environment:
-      HTTP_ADR: ":${HTTP_PORT:-8080}"
+      HTTP_ADDR: ":${HTTP_PORT:-8080}"
       APP_ENV: "${APP_ENV:-dev}"
       # В сети compose Postgres доступен по имени сервиса; перекрывает DATABASE_URL из .env.
       DATABASE_URL: "postgres://${POSTGRES_USER:-iptv}:${POSTGRES_PASSWORD:-iptv}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-iptv}?sslmode=disable"

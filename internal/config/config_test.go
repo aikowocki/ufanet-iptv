@@ -99,3 +99,19 @@ func TestLoadAppEnv(t *testing.T) {
 		t.Error("expected error for unknown APP_ENV")
 	}
 }
+
+func TestStreamBaseURL(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil || cfg.StreamBaseURL != "http://localhost:8081" {
+		t.Fatalf("default = %q, %v", cfg.StreamBaseURL, err)
+	}
+	cfg, err = Load(env(map[string]string{"STREAM_BASE_URL": "https://cdn.example.com/hls/"}))
+	if err != nil || cfg.StreamBaseURL != "https://cdn.example.com/hls" {
+		t.Fatalf("override = %q, %v", cfg.StreamBaseURL, err)
+	}
+	for _, bad := range []string{"cdn.example.com", "ftp://x", "http://", "/relative"} {
+		if _, err := Load(env(map[string]string{"STREAM_BASE_URL": bad})); err == nil {
+			t.Errorf("STREAM_BASE_URL=%q: expected error", bad)
+		}
+	}
+}

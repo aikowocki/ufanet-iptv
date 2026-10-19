@@ -17,6 +17,9 @@ import (
 	"github.com/aikowocki/ufanet-iptv/internal/infra/passhash"
 	"github.com/aikowocki/ufanet-iptv/internal/infra/postgres"
 	"github.com/aikowocki/ufanet-iptv/internal/transport/rest"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/auth"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/catalog"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/playback"
 )
 
 func main() {
@@ -60,8 +63,20 @@ func run() error {
 		}
 	}
 
+	// Хэш для фиктивной проверки неизвестных логинов: выравнивает время ответа.
+	dummyHash, err := hasher.RandomHash(ctx)
+	if err != nil {
+		return fmt.Errorf("dummy hash: %w", err)
+	}
+	exec := postgres.NewExecutor(pool)
+	users := postgres.NewUserRepository(exec)
+	channels := postgres.NewChannelRepository(exec)
 	srv := &http.Server{
-		Handler:           rest.NewRouter(log, pool.Ping),
+		Handler: rest.NewRouter(log, pool.Ping, rest.Deps{
+			Auth:     auth.New(users, hasher, dummyHash),
+			Channels: catalog.New(channels),
+			Playback: playback.New(channels, cfg.StreamBaseURL),
+		}),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

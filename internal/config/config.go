@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"runtime"
 	"slices"
 	"strconv"
@@ -44,6 +45,8 @@ type Config struct {
 	HashConcurrency int
 	// HashWaitTimeout — сколько ждать свободный слот проверки пароля.
 	HashWaitTimeout time.Duration
+	// StreamBaseURL — адрес стрим-сервера (http или https), к которому добавляется stream_path канала.
+	StreamBaseURL string
 }
 
 // Load читает конфигурацию через getenv (обычно os.Getenv).
@@ -69,6 +72,7 @@ func Load(getenv func(string) string) (Config, error) {
 
 		HashConcurrency: l.positiveInt("HASH_CONCURRENCY", runtime.GOMAXPROCS(0)),
 		HashWaitTimeout: l.duration("HASH_WAIT_TIMEOUT", 2*time.Second),
+		StreamBaseURL:   l.httpURL("STREAM_BASE_URL", "http://localhost:8081"),
 	}
 
 	if err := errors.Join(l.errs...); err != nil {
@@ -149,4 +153,15 @@ func (l *loader) level(key string, def slog.Level) slog.Level {
 		return def
 	}
 	return lvl
+}
+
+// httpURL читает абсолютный адрес со схемой http или https. Завершающий слэш отбрасывается.
+func (l *loader) httpURL(key, def string) string {
+	v := l.str(key, def)
+	u, err := url.Parse(v)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		l.errs = append(l.errs, fmt.Errorf("%s: want absolute http(s) URL, got %q", key, v))
+		return def
+	}
+	return strings.TrimRight(v, "/")
 }

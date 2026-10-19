@@ -33,7 +33,7 @@ func do(t *testing.T, h http.Handler, method, target string) *httptest.ResponseR
 }
 
 func TestHealthz(t *testing.T) {
-	rec := do(t, NewRouter(discardLogger(), nil), http.MethodGet, "/healthz")
+	rec := do(t, NewRouter(discardLogger(), nil, Deps{}), http.MethodGet, "/healthz")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -60,7 +60,7 @@ func TestRouterErrorsAreJSON(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := do(t, NewRouter(discardLogger(), nil), tt.method, tt.target)
+			rec := do(t, NewRouter(discardLogger(), nil, Deps{}), tt.method, tt.target)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
@@ -94,7 +94,7 @@ func TestReadyz(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := do(t, NewRouter(discardLogger(), tt.check), http.MethodGet, "/readyz")
+			rec := do(t, NewRouter(discardLogger(), tt.check, Deps{}), http.MethodGet, "/readyz")
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}

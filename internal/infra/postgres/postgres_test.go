@@ -2,11 +2,8 @@ package postgres
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -40,39 +37,13 @@ func (f *fakeHasher) Hash(_ context.Context, password string) (string, error) {
 	return "hash:" + password, nil
 }
 
-// Интеграционный тест: миграции и seed в отдельной схеме, повторный запуск ничего не дублирует.
-// Запускается только при заданном TEST_DATABASE_URL.
+// Интеграционный тест (нужен TEST_DATABASE_URL): миграции и seed в отдельной схеме,
+// повторный запуск ничего не дублирует.
 func TestMigrateAndSeed(t *testing.T) {
-	baseURL := os.Getenv("TEST_DATABASE_URL")
-	if baseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	dsn := newTestSchemaDSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	admin, err := NewPool(ctx, log, baseURL, 2, 10*time.Second)
-	if err != nil {
-		t.Fatalf("NewPool: %v", err)
-	}
-	defer admin.Close()
-
-	schema := fmt.Sprintf("test_%d", time.Now().UnixNano())
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
-		t.Fatalf("create schema: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE")
-	})
-
-	u, err := url.Parse(baseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	q := u.Query()
-	q.Set("search_path", schema)
-	u.RawQuery = q.Encode()
-	dsn := u.String()
 
 	// Повторное применение миграций безопасно.
 	for range 2 {

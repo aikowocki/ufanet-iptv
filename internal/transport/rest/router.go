@@ -18,10 +18,14 @@ type ReadyCheck func(ctx context.Context) error
 
 // NewRouter собирает корневой обработчик сервиса с общими middleware
 // ready используется в GET /readyz; nil означает «зависимостей нет, всегда готов».
-func NewRouter(log *slog.Logger, ready ReadyCheck) http.Handler {
+// deps задаёт API абонента (/api/v1), он требует Basic Auth.
+func NewRouter(log *slog.Logger, ready ReadyCheck, deps Deps) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("GET /readyz", handleReadyz(log, ready))
+	if deps.Auth != nil {
+		api{log: log, deps: deps}.register(mux)
+	}
 
 	// Порядок: RequestID -> AccessLog -> Recover, чтобы ответ 500 после паники
 	// тоже попал в access-лог с идентификатором запроса.
@@ -38,7 +42,7 @@ func jsonErrors(mux *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h, pattern := mux.Handler(r)
 		if pattern != "" {
-			h.ServeHTTP(w, r)
+			mux.ServeHTTP(w, r)
 			return
 		}
 

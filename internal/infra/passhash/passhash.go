@@ -18,6 +18,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -25,6 +26,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/argon2"
+
+	"github.com/aikowocki/ufanet-iptv/internal/domain"
 )
 
 // Параметры по умолчанию соответствуют рекомендации OWASP (m=19 MiB, t=2, p=1).
@@ -42,8 +45,9 @@ const (
 
 var (
 	// ErrBusy означает, что свободный слот проверки не появился вовремя.
-	// Транспорт должен ответить 503 с Retry-After.
-	ErrBusy = errors.New("passhash: too many concurrent hash operations")
+	// Оборачивает domain.ErrBusy, поэтому usecase и транспорт различают перегрузку
+	// через errors.Is(err, domain.ErrBusy) и отвечают 503 с Retry-After.
+	ErrBusy = fmt.Errorf("passhash: too many concurrent hash operations: %w", domain.ErrBusy)
 	// ErrInvalidHash означает, что строка не является корректным argon2id PHC-хэшем.
 	ErrInvalidHash = errors.New("passhash: invalid hash format")
 	// ErrPasswordTooLong означает, что пароль длиннее maxPasswordLen байт.
@@ -97,6 +101,16 @@ func (h *Hasher) Hash(ctx context.Context, password string) (string, error) {
 		base64.RawStdEncoding.EncodeToString(salt),
 		base64.RawStdEncoding.EncodeToString(key),
 	), nil
+}
+
+// RandomHash хэширует случайную строку, которую никто не знает. Нужен для фиктивной
+// проверки несуществующих логинов: время ответа не выдаёт, есть ли такой пользователь.
+func (h *Hasher) RandomHash(ctx context.Context) (string, error) {
+	b := make([]byte, saltLen)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("passhash: read random: %w", err)
+	}
+	return h.Hash(ctx, hex.EncodeToString(b))
 }
 
 // Verify сообщает, подходит ли пароль к PHC-строке encoded.

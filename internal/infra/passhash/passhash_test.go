@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/aikowocki/ufanet-iptv/internal/domain"
 )
 
 func TestHashVerify(t *testing.T) {
@@ -267,5 +269,34 @@ func TestSlotReleasedAfterFailure(t *testing.T) {
 	release()
 	if _, err := h.Hash(context.Background(), "p"); err != nil {
 		t.Errorf("Hash after release: %v", err)
+	}
+}
+
+// Перегрузка должна распознаваться как доменная ошибка без адаптера в main.
+func TestErrBusyIsDomainErrBusy(t *testing.T) {
+	if !errors.Is(ErrBusy, domain.ErrBusy) {
+		t.Error("passhash.ErrBusy должна оборачивать domain.ErrBusy")
+	}
+}
+
+// RandomHash даёт корректный хэш, к которому не подходит ни один осмысленный пароль,
+// и каждый раз новый.
+func TestRandomHash(t *testing.T) {
+	h := New(1, time.Second)
+	ctx := context.Background()
+
+	a, err := h.RandomHash(ctx)
+	if err != nil {
+		t.Fatalf("RandomHash: %v", err)
+	}
+	b, err := h.RandomHash(ctx)
+	if err != nil {
+		t.Fatalf("RandomHash: %v", err)
+	}
+	if a == b {
+		t.Error("два вызова вернули одинаковый хэш")
+	}
+	if ok, err := h.Verify(ctx, "password", a); err != nil || ok {
+		t.Errorf("Verify = %v, %v; want false, nil", ok, err)
 	}
 }
