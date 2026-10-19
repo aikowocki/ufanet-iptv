@@ -10,6 +10,8 @@ type StreamConfig struct {
 	DB Database
 
 	HTTPAddr string
+	// PprofAddr — адрес pprof-сервера; пусто — выключен.
+	PprofAddr string
 
 	// FFmpegBin — исполняемый файл ffmpeg.
 	FFmpegBin string
@@ -31,7 +33,8 @@ func LoadStream(getenv func(string) string) (StreamConfig, error) {
 			HTTPTimeouts: l.httpTimeouts(),
 			DB:           l.database(4),
 
-			HTTPAddr: l.str("STREAM_HTTP_ADDR", ":8081"),
+			HTTPAddr:  l.str("STREAM_HTTP_ADDR", ":8081"),
+			PprofAddr: l.str("STREAM_PPROF_ADDR", ""),
 
 			FFmpegBin:             l.str("FFMPEG_BIN", "ffmpeg"),
 			FontFamily:            l.str("STREAM_FONT_FAMILY", "DejaVu Sans"),

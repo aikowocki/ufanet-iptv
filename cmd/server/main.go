@@ -105,6 +105,7 @@ func run() error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	log.Info("server listening", "addr", ln.Addr().String())
+	httpserve.StartPprof(ctx, log, cfg.PprofAddr, cfg.ShutdownTimeout)
 
 	if err := httpserve.Serve(ctx, srv, ln, cfg.ShutdownTimeout); err != nil {
 		return err

@@ -13,6 +13,8 @@ type Config struct {
 	DB Database
 
 	HTTPAddr string
+	// PprofAddr — адрес pprof-сервера; пусто — выключен.
+	PprofAddr string
 
 	// HashConcurrency — сколько проверок argon2id может выполняться одновременно.
 	HashConcurrency int
@@ -35,7 +37,8 @@ func Load(getenv func(string) string) (Config, error) {
 			HTTPTimeouts: l.httpTimeouts(),
 			DB:           l.database(10),
 
-			HTTPAddr: l.str("HTTP_ADDR", ":8080"),
+			HTTPAddr:  l.str("HTTP_ADDR", ":8080"),
+			PprofAddr: l.str("PPROF_ADDR", ""),
 
 			HashConcurrency: l.positiveInt("HASH_CONCURRENCY", runtime.GOMAXPROCS(0)),
 			HashWaitTimeout: l.duration("HASH_WAIT_TIMEOUT", 2*time.Second),
