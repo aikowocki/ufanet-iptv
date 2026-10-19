@@ -4,31 +4,7 @@
 
 ## Как повторить
 
-Нужны Docker, [task](https://taskfile.dev), `hey` (`brew install hey`) и Go.
-
-```bash
-task bench -- baseline                      # микробенчмарки -> bench/results/baseline/micro.txt
-task load:up                                # стенд: Postgres, app, stream; pprof на 127.0.0.1:6060 (app) и :6061 (stream)
-task load:profile -- baseline channels      # GET /api/v1/channels
-task load:profile -- baseline playback      # GET /api/v1/channels/1/playback
-task load:profile -- baseline playlist      # плейлист на стрим-сервере по подписанной ссылке
-task load:down
-```
-
-Второй аргумент `load:profile` задаёт имя набора (`baseline`, `cache` и т. д.), результаты лежат в `bench/results/<имя>/<сценарий>/`:
-
-| Файл | Содержимое |
-|---|---|
-| `hey.txt` | RPS, задержки, распределение кодов ответа |
-| `cpu.pprof`, `cpu.top.txt` | CPU-профиль за 20 с под нагрузкой и его топ |
-| `allocs.pprof`, `allocs.top.txt` | аллокации за те же 20 с |
-| `goroutine.txt` | снимок горутин |
-| `pg.txt` | топ запросов из `pg_stat_statements` |
-| `docker-stats.txt`, `meta.txt` | загрузка контейнеров, коммит, железо, параметры нагрузки |
-
-Посмотреть профиль: `go tool pprof -http=:0 bench/results/baseline/channels/cpu.pprof`. Сравнить «до» и «после»: `go tool pprof -top -diff_base=bench/results/baseline/channels/cpu.pprof bench/results/cache/channels/cpu.pprof`, а микробенчмарки: `benchstat bench/results/baseline/micro.txt bench/results/cache/micro.txt`.
-
-Параметры: `C` (параллелизм, по умолчанию 50), `DURATION` (30 с), `CPU_SECONDS` (20 с), например `C=100 task load:profile -- cache channels`.
+Скрипты замеров (`bench/profile.sh`, `bench/multiuser.sh`, `bench/demo-invalidation.sh`), стенд `docker-compose.loadtest.yml`, задачи Taskfile (`load:up`, `load:profile`, `load:multiuser`, `load:down`) и сырые результаты (pprof, вывод `hey`, `pg_stat_statements`) не входят в основную ветку, они лежат в ветке [task-4-optimization](https://github.com/aikowocki/ufanet-iptv/tree/task-4-optimization). Нужны Docker, [task](https://taskfile.dev), `hey` (`brew install hey`) и Go. Микробенчмарки остались здесь: `task bench`.
 
 Условия: закрытая нагрузка `hey` (каждый из 50 клиентов шлёт следующий запрос после ответа), пользователь `alice`, 30 каналов из seed. Контейнеры app и stream ограничены 2 CPU и 1 ГБ. Генератор нагрузки и стенд живут на одной машине, поэтому абсолютные числа годятся для сравнения «до/после» на этом же железе, но не как паспорт сервиса. Профили pprof не защищены авторизацией, стенд публикует их только на loopback.
 
@@ -89,7 +65,7 @@ task load:down
 
 Во всех прогонах только ответы 200. `channels` вырос ещё в 2,3 раза относительно шагов 1-2. У `playback` и `playlist` шаг 3 ничего не менял, и их результат совпал с прогоном `cache` в пределах 5%, так что шум стенда небольшой.
 
-Микробенчмарки (`bench/results/baseline/micro.txt`, `bench/results/cache/micro.txt`; в `catalog/micro.txt` аллокации те же, а время местами хуже из-за фоновой нагрузки на машине во время прогона):
+Микробенчмарки (наборы `baseline` и `cache` в ветке task-4-optimization; в наборе `catalog` аллокации те же, а время местами хуже из-за фоновой нагрузки на машине во время прогона):
 
 | Бенчмарк | До | После |
 |---|---|---|
@@ -99,7 +75,7 @@ task load:down
 
 ### Много пользователей и холодный старт
 
-Сценарий `bench/multiuser.sh` (`task load:multiuser -- <метка>`): 200 разных пользователей из admin API (каждый с подпиской на пакет 1), 50 параллельных клиентов, каждый запрос идёт от случайного пользователя. Сначала перезапускается app (кэши пусты) и сразу даётся 15 с нагрузки (`cold`), затем ещё 15 с на прогретом кэше (`steady`). Результаты: `bench/results/multiuser-baseline/` (коммит `e748b53`, без кэшей) и `bench/results/multiuser-cache/` (текущая ветка).
+Сценарий `bench/multiuser.sh` в ветке task-4-optimization (`task load:multiuser -- <метка>`): 200 разных пользователей из admin API (каждый с подпиской на пакет 1), 50 параллельных клиентов, каждый запрос идёт от случайного пользователя. Сначала перезапускается app (кэши пусты) и сразу даётся 15 с нагрузки (`cold`), затем ещё 15 с на прогретом кэше (`steady`). Результаты: наборы `multiuser-baseline` (коммит `e748b53`, без кэшей) и `multiuser-cache` в той же ветке.
 
 | | baseline | после, холодный старт (15 с) | после, прогрето |
 |---|---|---|---|
@@ -120,22 +96,8 @@ task load:down
 
 ### Компромиссы и ограничения
 
-- **Несколько экземпляров.** Кэши локальны, но правки админа доходят до всех экземпляров через `LISTEN/NOTIFY` (`pg_notify` в той же транзакции, что и запись; слушатель с переподключением и полным сбросом кэшей после каждого подключения). `bench/demo-invalidation.sh` поднимает два экземпляра: выключенная подписка видна на втором в списке каналов через ~20 мс вместо `CACHE_TTL` (10 с), выключенный пользователь получает 401 через ~40 мс вместо `AUTH_CACHE_TTL` (45 с). TTL остаётся страховкой на случай потерянного события. Нужно прямое соединение с Postgres: через PgBouncer в transaction-режиме `LISTEN` не работает. Нагрузочные замеры с уведомлениями не повторялись: админские правки не лежат на горячем пути, а слушатель добавляет одно соединение на экземпляр.
+- **Несколько экземпляров.** Кэши локальны, но правки админа доходят до всех экземпляров через `LISTEN/NOTIFY` (`pg_notify` в той же транзакции, что и запись; слушатель с переподключением и полным сбросом кэшей после каждого подключения). `bench/demo-invalidation.sh` (ветка task-4-optimization) поднимает два экземпляра: выключенная подписка видна на втором в списке каналов через ~20 мс вместо `CACHE_TTL` (10 с), выключенный пользователь получает 401 через ~40 мс вместо `AUTH_CACHE_TTL` (45 с). TTL остаётся страховкой на случай потерянного события. Нужно прямое соединение с Postgres: через PgBouncer в transaction-режиме `LISTEN` не работает. Нагрузочные замеры с уведомлениями не повторялись: админские правки не лежат на горячем пути, а слушатель добавляет одно соединение на экземпляр.
 - **Сроки подписок.** Срок записи каталога считается относительно часов БД (разница `expires_at - now()` вычисляется в SQL), поэтому расхождение часов сервиса и БД не влияет.
 - **Один пользователь в основных сценариях.** `channels`, `playback` и `playlist` идут под `alice`, поэтому кэши дают почти 100% попаданий. Многопользовательский сценарий и холодный старт разобраны выше; повторное протухание кэша через 45 с на длинной нагрузке не измерялось.
 - **Отключить кэш нельзя**: `AUTH_CACHE_TTL` и `CACHE_TTL` принимают только положительные значения. Для отладки можно поставить `1ms`.
 - Один прогон на сценарий и общая машина для стенда и генератора: числа пригодны для сравнения «до/после» на этом железе, но не как паспорт сервиса.
-
-### Как повторить итоговый замер
-
-```bash
-git switch task-4-optimization
-task bench -- catalog
-task load:up
-task load:profile -- catalog channels
-task load:profile -- catalog playback
-task load:profile -- catalog playlist
-task load:down
-```
-
-Сравнение с baseline: `benchstat bench/results/baseline/micro.txt bench/results/catalog/micro.txt` и `go tool pprof -top -diff_base=bench/results/baseline/channels/cpu.pprof bench/results/catalog/channels/cpu.pprof`.

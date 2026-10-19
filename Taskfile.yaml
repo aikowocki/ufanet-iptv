@@ -96,30 +96,9 @@ tasks:
       - docker compose up --build -d
 
   bench:
-    desc: "Микробенчмарки; результат в bench/results/<label>/micro.txt: task bench -- baseline"
+    desc: Микробенчмарки (go test -bench)
     cmds:
-      - |
-        label="{{.CLI_ARGS}}"; label="${label:-local}"
-        mkdir -p "bench/results/$label"
-        go test -run '^$' -bench . -benchmem -benchtime 2s -count 3 \
-          ./internal/infra/passhash ./internal/infra/stream ./internal/streamserver ./internal/transport/rest \
-          | tee "bench/results/$label/micro.txt"
-  load:up:
-    desc: Поднять изолированный стенд для нагрузки (app, stream, Postgres, pprof на 127.0.0.1)
-    cmds:
-      - docker compose -p iptv-load -f docker-compose.loadtest.yml up --build -d --wait
-  load:down:
-    desc: Остановить стенд нагрузки и удалить его данные
-    cmds:
-      - docker compose -p iptv-load -f docker-compose.loadtest.yml down -v --remove-orphans
-  load:profile:
-    desc: "Нагрузка + pprof: task load:profile -- baseline channels (сценарии: channels, playback, playlist)"
-    cmds:
-      - bench/profile.sh {{.CLI_ARGS}}
-  load:multiuser:
-    desc: "200 пользователей и холодный старт: task load:multiuser -- baseline (нужен load:up)"
-    cmds:
-      - bench/multiuser.sh {{.CLI_ARGS}}
+      - go test -run '^$' -bench . -benchmem -benchtime 2s -count 3 ./internal/infra/passhash ./internal/infra/stream ./internal/streamserver ./internal/transport/rest
   install-go-test-coverage:
     desc: Установить go-test-coverage (для проверки порога покрытия)
     cmds:
