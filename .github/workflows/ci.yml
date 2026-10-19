@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: iptv
+          POSTGRES_PASSWORD: iptv
+          POSTGRES_DB: iptv_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U iptv -d iptv_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      # CI=true заставляет интеграционные тесты падать, а не пропускаться,
+      # если TEST_DATABASE_URL не задан.
+      - name: Test
+        run: go test -race -count=1 ./...
+        env:
+          CI: "true"
+          TEST_DATABASE_URL: postgres://iptv:iptv@localhost:5432/iptv_test?sslmode=disable
