@@ -1,7 +1,0 @@
- calls  | total_ms | mean_ms |                                           query                                            
---------+----------+---------+--------------------------------------------------------------------------------------------
- 479620 |  14726.0 |   0.031 | SELECT EXISTS (SELECT $3 FROM channels c WHERE c.id = $2 AND c.is_active AND EXISTS ( SELE
- 479620 |   3943.6 |   0.008 | SELECT id, number, name, stream_path, is_active FROM channels WHERE id = $1
-      1 |      0.0 |   0.007 | SELECT id, login, password_hash, is_active, is_admin FROM users WHERE login = $1
-(3 rows)
-

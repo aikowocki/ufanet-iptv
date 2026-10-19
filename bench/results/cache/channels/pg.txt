@@ -1,6 +1,0 @@
- calls  | total_ms | mean_ms |                                           query                                            
---------+----------+---------+--------------------------------------------------------------------------------------------
- 336342 |  67182.7 |   0.200 | SELECT c.id, c.number, c.name, c.stream_path, c.is_active, EXISTS ( SELECT 1 FROM package_
-      1 |      0.0 |   0.027 | SELECT id, login, password_hash, is_active, is_admin FROM users WHERE login = $1
-(2 rows)
-

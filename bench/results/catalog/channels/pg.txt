@@ -1,7 +1,0 @@
- calls | total_ms | mean_ms |                                           query                                            
--------+----------+---------+--------------------------------------------------------------------------------------------
-     3 |      0.2 |   0.073 | SELECT c.id, c.number, c.name, c.stream_path, c.is_active, EXISTS ( SELECT $2 FROM package
-     3 |      0.1 |   0.025 | SELECT EXTRACT($2 FROM min(expires_at) - now())::float8 FROM subscriptions WHERE user_id =
-     1 |      0.0 |   0.025 | SELECT id, login, password_hash, is_active, is_admin FROM users WHERE login = $1
-(3 rows)
-

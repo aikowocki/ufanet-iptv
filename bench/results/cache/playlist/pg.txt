@@ -1,4 +1,0 @@
- calls | total_ms | mean_ms | query 
--------+----------+---------+-------
-(0 rows)
-
