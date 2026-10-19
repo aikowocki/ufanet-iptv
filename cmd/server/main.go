@@ -91,7 +91,8 @@ func run() error {
 		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelError),
 	}
 
-	ln, err := net.Listen("tcp", cfg.HTTPAddr)
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", cfg.HTTPAddr)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}

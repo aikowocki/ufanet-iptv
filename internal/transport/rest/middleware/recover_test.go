@@ -20,7 +20,7 @@ func TestRecoverHidesDetails(t *testing.T) {
 	h := Chain(boom, RequestID, AccessLog(log), Recover(log))
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
@@ -54,5 +54,5 @@ func TestRecoverRepanicsOnAbortHandler(t *testing.T) {
 			t.Fatalf("recovered %v, want http.ErrAbortHandler to propagate", rec)
 		}
 	}()
-	Recover(log)(abort).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	Recover(log)(abort).ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 }

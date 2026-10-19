@@ -83,6 +83,36 @@ func TestMigrateAndSeed(t *testing.T) {
 		t.Errorf("channels = %d, want %d (>= 5)", got, len(seedChannels))
 	}
 
+	if got := count("packages"); got != len(seedPackages) {
+		t.Errorf("packages = %d, want %d", got, len(seedPackages))
+	}
+	if got := count("subscriptions"); got != len(seedSubscriptionsList) {
+		t.Errorf("subscriptions = %d, want %d", got, len(seedSubscriptionsList))
+	}
+
+	// Демо-доступ: список всегда полный, но alice доступны все каналы, а bob только «Базовый»
+	// (пока не истёк срок).
+	repo := NewChannelRepository(NewExecutor(pool))
+	for login, want := range map[string]int{"alice": len(seedChannels), "bob": len(seedChannels) - 1} {
+		var id int64
+		if err := pool.QueryRow(ctx, `SELECT id FROM users WHERE login = $1`, login).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		list, err := repo.ListChannelsForUser(ctx, id)
+		if err != nil || len(list) != len(seedChannels) {
+			t.Fatalf("%s: listed = %d, %v; want %d", login, len(list), err, len(seedChannels))
+		}
+		n := 0
+		for _, c := range list {
+			if c.Available {
+				n++
+			}
+		}
+		if n != want {
+			t.Errorf("%s: available = %d, want %d", login, n, want)
+		}
+	}
+
 	// Админ создан миграцией (до сидера), с настоящим argon2id-хэшем.
 	var isAdmin bool
 	var hash string

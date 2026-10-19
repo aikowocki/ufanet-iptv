@@ -16,7 +16,7 @@ func TestAccessLogOmitsQueryAndCredentials(t *testing.T) {
 	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	h := Chain(ok, RequestID, AccessLog(log))
 
-	req := httptest.NewRequest(http.MethodGet, "/x?sig=topsecret", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/x?sig=topsecret", nil)
 	req.SetBasicAuth("alice", "hunter2")
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
@@ -36,7 +36,7 @@ func TestAccessLogDefaultsToStatus200(t *testing.T) {
 	log := slog.New(slog.NewJSONHandler(&logs, nil))
 
 	silent := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
-	AccessLog(log)(silent).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	AccessLog(log)(silent).ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 
 	if !strings.Contains(logs.String(), `"status":200`) {
 		t.Errorf("log = %s, want status 200", logs.String())

@@ -12,7 +12,7 @@ func TestRequestID(t *testing.T) {
 		seen = RequestIDFrom(r.Context())
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	req.Header.Set("X-Request-ID", "client-supplied")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)

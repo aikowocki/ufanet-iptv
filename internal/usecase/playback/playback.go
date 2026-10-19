@@ -15,6 +15,8 @@ import (
 type ChannelRepository interface {
 	// GetChannel возвращает канал или domain.ErrNotFound.
 	GetChannel(ctx context.Context, id int64) (domain.Channel, error)
+	// HasChannelAccess сообщает, есть ли у пользователя действующая подписка на канал.
+	HasChannelAccess(ctx context.Context, userID, channelID int64) (bool, error)
 }
 
 // Signer подписывает ссылку на поток для пользователя.
@@ -37,7 +39,8 @@ func New(channels ChannelRepository, signer Signer, baseURL string, ttl time.Dur
 }
 
 // Link возвращает подписанную ссылку на поток, привязанную к пользователю.
-// Выключенный канал считается несуществующим.
+// Выключенный канал считается несуществующим (domain.ErrNotFound); существующий канал
+// без действующей подписки даёт domain.ErrForbidden.
 func (s *Service) Link(ctx context.Context, user domain.User, channelID int64) (string, error) {
 	ch, err := s.channels.GetChannel(ctx, channelID)
 	if err != nil {
@@ -48,6 +51,13 @@ func (s *Service) Link(ctx context.Context, user domain.User, channelID int64) (
 	}
 	if !ch.IsActive {
 		return "", domain.ErrNotFound
+	}
+	ok, err := s.channels.HasChannelAccess(ctx, user.ID, ch.ID)
+	if err != nil {
+		return "", fmt.Errorf("check access: %w", err)
+	}
+	if !ok {
+		return "", domain.ErrForbidden
 	}
 	link, err := s.signer.Sign(s.baseURL+"/"+strings.TrimLeft(ch.StreamPath, "/"), user.ID, s.ttl)
 	if err != nil {

@@ -14,13 +14,17 @@ func TestServeGracefulShutdown(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 
-	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		close(started)
-		<-release
-		w.WriteHeader(http.StatusOK)
-	})}
+	srv := &http.Server{
+		ReadHeaderTimeout: 5 * time.Second,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			close(started)
+			<-release
+			w.WriteHeader(http.StatusOK)
+		}),
+	}
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +41,12 @@ func TestServeGracefulShutdown(t *testing.T) {
 	}
 	reqDone := make(chan result, 1)
 	go func() {
-		resp, err := http.Get("http://" + ln.Addr().String())
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+ln.Addr().String(), nil)
+		if err != nil {
+			reqDone <- result{err: err}
+			return
+		}
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			reqDone <- result{err: err}
 			return
