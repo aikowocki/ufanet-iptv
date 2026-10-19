@@ -1,0 +1,28 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# IDE
+.idea
+.vscode
+.kiro
+
+# Build and test artifacts
+/bin
+/server
+*.out
+*.test
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+# Frontend
+/web/node_modules
+/web/dist
+
+# macOS
+.DS_Store

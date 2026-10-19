@@ -1,0 +1,135 @@
+version: '3'
+
+# Переменные из .env (если файл есть) доступны всем задачам, включая run.
+dotenv: ['.env']
+
+# Задачи test и coverage сами собирают TEST_DATABASE_URL из переменных .env
+# (порт берётся из HOST_POSTGRES_PORT); явно заданный TEST_DATABASE_URL приоритетнее.
+
+tasks:
+  build:
+    desc: Собрать все пакеты
+    cmds:
+      - go build ./...
+
+  run:
+    desc: Запустить сервис локально
+    cmds:
+      - go run ./cmd/server
+
+  run:stream:
+    desc: Запустить учебный стрим-сервер локально
+    cmds:
+      - go run ./cmd/stream
+
+  web:install:
+    desc: Установить зависимости фронтенда
+    dir: web
+    cmds:
+      - npm ci
+  web:dev:
+    desc: "Запустить фронтенд (Vite, http://localhost:5173); бэкенд: VITE_API_TARGET, по умолчанию :8090"
+    dir: web
+    cmds:
+      - npm run dev
+  web:build:
+    desc: Проверить типы и собрать фронтенд
+    dir: web
+    cmds:
+      - npm run build
+  vet:
+    desc: Статическая проверка go vet
+    cmds:
+      - go vet ./...
+
+  db:up:
+    desc: Поднять только Postgres и дождаться готовности (healthcheck)
+    cmds:
+      - docker compose up -d --wait postgres
+
+  test:
+    desc: Тесты с детектором гонок, включая интеграционные (поднимает Postgres)
+    deps: [db:up]
+    cmds:
+      - |
+        export TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://${POSTGRES_USER:-iptv}:${POSTGRES_PASSWORD:-iptv}@localhost:${HOST_POSTGRES_PORT:-5482}/${POSTGRES_DB:-iptv}?sslmode=disable}"
+        go test -race -count=1 ./...
+
+  lint:
+    desc: golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  check:
+    desc: Всё, что должно проходить перед коммитом
+    cmds:
+      - task: build
+      - task: vet
+      - task: test
+
+  migrate:new:
+    desc: "Создать пару миграций: task migrate:new -- add_packages"
+    cmds:
+      - |
+        name="{{.CLI_ARGS}}"
+        case "$name" in
+          ""|*[!a-z0-9_]*) echo "usage: task migrate:new -- snake_case_name" >&2; exit 1 ;;
+        esac
+        ts=$(date -u +%Y%m%d%H%M%S)
+        dir=internal/infra/postgres/migrations
+        : > "$dir/${ts}_${name}.up.sql"
+        : > "$dir/${ts}_${name}.down.sql"
+        echo "created $dir/${ts}_${name}.{up,down}.sql"
+  docker:up:
+    desc: Поднять сервис и Postgres в Docker
+    cmds:
+      - docker compose up --build -d
+  docker:down:
+    desc: Остановить контейнеры (данные Postgres сохраняются)
+    cmds:
+      - docker compose down
+
+  docker:reset:
+    desc: Удалить контейнеры и том с базой, затем поднять всё заново (данные будут потеряны)
+    cmds:
+      - docker compose down -v --remove-orphans
+      - docker compose up --build -d
+
+  bench:
+    desc: Микробенчмарки (go test -bench)
+    cmds:
+      - go test -run '^$' -bench . -benchmem -benchtime 2s -count 3 ./internal/infra/passhash ./internal/infra/stream ./internal/streamserver ./internal/transport/rest
+  install-go-test-coverage:
+    desc: Установить go-test-coverage (для проверки порога покрытия)
+    cmds:
+      - go install github.com/vladopajic/go-test-coverage/v2@latest
+
+  coverage:
+    desc: Прогнать тесты с покрытием и проверить порог, включая интеграционные (поднимает Postgres)
+    deps: [install-go-test-coverage, db:up]
+    cmds:
+      - |
+        export TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://${POSTGRES_USER:-iptv}:${POSTGRES_PASSWORD:-iptv}@localhost:${HOST_POSTGRES_PORT:-5482}/${POSTGRES_DB:-iptv}?sslmode=disable}"
+        go test ./... -covermode=atomic -coverpkg=./... -coverprofile=coverage.out
+      - '{{.GOBIN}}/go-test-coverage --config=./.testcoverage.yml'
+    vars:
+      GOBIN:
+        sh: echo "$(go env GOPATH)/bin"
+
+  unit-coverage:
+    desc: Проверить покрытие unit-тестами внутренних пакетов без integration
+    deps: [install-go-test-coverage]
+    cmds:
+      - go test ./internal/... -covermode=atomic -coverpkg=./internal/... -coverprofile=coverage-unit.out
+      - '{{.GOBIN}}/go-test-coverage --config=./.testcoverage-unit.yml'
+    vars:
+      GOBIN:
+        sh: echo "$(go env GOPATH)/bin"
+
+  cover:
+    desc: Показать итоговое покрытие и порог по последнему прогону coverage
+    cmds:
+      - '{{.GOBIN}}/go-test-coverage --config=./.testcoverage.yml 2>&1 | grep -i "total test coverage\|threshold"'
+    vars:
+      GOBIN:
+        sh: echo "$(go env GOPATH)/bin"

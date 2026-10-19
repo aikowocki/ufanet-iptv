@@ -1,0 +1,11 @@
+profile: coverage-unit.out
+
+threshold:
+  file: 50
+  package: 50
+  total: 50
+
+exclude:
+  paths:
+    # Репозитории проверяются интеграционными тестами
+    - ^internal/infra/postgres/

@@ -1,0 +1,86 @@
+# +10
+name: IPTV-Ufanet
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-iptv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iptv}
+      POSTGRES_DB: ${POSTGRES_DB:-iptv}
+    ports:
+      - "${HOST_POSTGRES_PORT:-5482}:${POSTGRES_PORT:-5432}"
+
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # $$ раскрывается внутри контейнера, а не при разборе compose-файла.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # Учебный стрим-сервер: проверяет подпись ссылки и отдаёт заглушку HLS-плейлиста.
+  stream:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
+      target: stream
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      STREAM_HTTP_ADDR: ":${STREAM_PORT:-8081}"
+      APP_ENV: "${APP_ENV:-dev}"
+      # Названия каналов читаются из той же БД, что и в API.
+      DATABASE_URL: "postgres://${POSTGRES_USER:-iptv}:${POSTGRES_PASSWORD:-iptv}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-iptv}?sslmode=disable"
+    ports:
+      - "${HOST_STREAM_PORT:-8081}:${STREAM_PORT:-8081}"
+    healthcheck:
+      # Без подписи сервер отвечает 403: значит, он жив и проверяет ссылки.
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:${STREAM_PORT:-8081}/live/x.m3u8 2>&1 | grep -q 403" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    stop_grace_period: 15s
+
+  app:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
+      target: server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HTTP_ADDR: ":${HTTP_PORT:-8080}"
+      APP_ENV: "${APP_ENV:-dev}"
+      # Адрес в ссылках видит клиент, поэтому это адрес хоста, а не имя сервиса compose.
+      STREAM_BASE_URL: "http://localhost:${HOST_STREAM_PORT:-8081}"
+      # В сети compose Postgres доступен по имени сервиса; перекрывает DATABASE_URL из .env.
+      DATABASE_URL: "postgres://${POSTGRES_USER:-iptv}:${POSTGRES_PASSWORD:-iptv}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-iptv}?sslmode=disable"
+    ports:
+      - "${HOST_HTTP_PORT:-8080}:${HTTP_PORT:-8080}"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    stop_grace_period: 15s
+  # Фронтенд (Vue + Vuetify): статика и прокси /api на сервис app.
+  web:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile.web
+      target: web
+    depends_on:
+      - app
+    ports:
+      - "${HOST_WEB_PORT:-3000}:80"
+volumes:
+  pgdata:

@@ -1,0 +1,135 @@
+// Command server запускает HTTP API IPTV-сервиса.
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/aikowocki/ufanet-iptv/internal/config"
+	"github.com/aikowocki/ufanet-iptv/internal/httpserve"
+	"github.com/aikowocki/ufanet-iptv/internal/infra/passhash"
+	"github.com/aikowocki/ufanet-iptv/internal/infra/postgres"
+	"github.com/aikowocki/ufanet-iptv/internal/infra/stream"
+	"github.com/aikowocki/ufanet-iptv/internal/transport/rest"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/admin"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/auth"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/catalog"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/invalidate"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/playback"
+	"github.com/aikowocki/ufanet-iptv/internal/usecase/subscription"
+)
+
+func main() {
+	if err := run(); err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, "fatal:", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	cfg, err := config.Load(os.Getenv)
+	if err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+
+	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
+	slog.SetDefault(log)
+
+	// Отмена контекста по SIGINT/SIGTERM запускает корректную остановку.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	// После первого сигнала возвращаем сигналам стандартное поведение: если остановка
+	// зависла, повторный Ctrl+C завершит процесс сразу.
+	context.AfterFunc(ctx, stop)
+
+	if err := postgres.Migrate(log, cfg.DB.URL); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+
+	pool, err := postgres.NewPool(ctx, log, cfg.DB.URL, cfg.DB.MaxConnections, cfg.DB.ConnectTimeout)
+	if err != nil {
+		return fmt.Errorf("postgres: %w", err)
+	}
+	defer pool.Close()
+
+	hasher := passhash.New(cfg.HashConcurrency, cfg.HashWaitTimeout)
+	// Сидер запускается только в dev: админ создаётся миграцией, а демо-данные нет.
+	if cfg.Env == config.EnvDev {
+		if err := postgres.Seed(ctx, log, pool, hasher); err != nil {
+			return fmt.Errorf("seed: %w", err)
+		}
+	}
+
+	// Хэш для фиктивной проверки неизвестных логинов: выравнивает время ответа.
+	dummyHash, err := hasher.RandomHash(ctx)
+	if err != nil {
+		return fmt.Errorf("dummy hash: %w", err)
+	}
+	signer, err := stream.New([]byte(cfg.StreamSigningKey), nil)
+	if err != nil {
+		return fmt.Errorf("stream signer: %w", err)
+	}
+	if cfg.UsesDevSigningKey() {
+		log.Warn("STREAM_SIGNING_KEY is not set: using insecure dev key")
+	}
+	exec := postgres.NewExecutor(pool)
+	users := postgres.NewUserRepository(exec)
+	channels := postgres.NewChannelRepository(exec)
+	subscriptions := postgres.NewSubscriptionRepository(exec)
+	adminRepo := postgres.NewAdminRepository(exec)
+	txm := postgres.NewTxManager(pool)
+
+	// Кэш успешных проверок пароля: без него каждый запрос платит за argon2id.
+	authSvc, err := auth.NewCached(auth.New(users, hasher, dummyHash), cfg.AuthCacheTTL, nil)
+	if err != nil {
+		return fmt.Errorf("auth cache: %w", err)
+	}
+	catalogSvc, err := catalog.NewCached(catalog.New(channels), channels, cfg.CacheTTL, nil)
+	if err != nil {
+		return fmt.Errorf("catalog cache: %w", err)
+	}
+	// События инвалидации от всех экземпляров (и от этого тоже): правки админа видны сразу,
+	// а не после TTL кэшей. Соединение закрывается при остановке по ctx.
+	listener := postgres.NewListener(log, cfg.DB.URL, invalidate.New(authSvc, catalogSvc))
+	listenerDone := make(chan struct{})
+	go func() {
+		defer close(listenerDone)
+		listener.Run(ctx)
+	}()
+	srv := &http.Server{
+		Handler: rest.NewRouter(log, pool.Ping, rest.Deps{
+			Auth:          authSvc,
+			Channels:      catalogSvc,
+			Playback:      playback.New(channels, signer, cfg.StreamBaseURL, cfg.StreamTokenTTL),
+			Subscriptions: subscription.New(subscriptions),
+			Admin: admin.New(adminRepo, txm, hasher, admin.WithUserInvalidator(authSvc), admin.WithCatalogInvalidator(catalogSvc),
+				admin.WithInvalidator(postgres.NewNotifier(exec))),
+		}),
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelError),
+	}
+
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", cfg.HTTPAddr)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+	log.Info("server listening", "addr", ln.Addr().String())
+	httpserve.StartPprof(ctx, log, cfg.PprofAddr, cfg.ShutdownTimeout)
+
+	if err := httpserve.Serve(ctx, srv, ln, cfg.ShutdownTimeout); err != nil {
+		return err
+	}
+	<-listenerDone
+	log.Info("server stopped")
+	return nil
+}
